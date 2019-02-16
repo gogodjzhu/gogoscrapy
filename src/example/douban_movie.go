@@ -81,11 +81,11 @@ func (this *DoubanMovieProc) Process(page entity.IPage) error {
 }
 
 func main() {
-	gogodjzhuSpider := src.NewSpider(&DoubanMovieProc{})
-	gogodjzhuSpider.Downloader(downloader.NewSimpleDownloader(10*time.Second, nil))
-	gogodjzhuSpider.Pipeline(pipeline.NewConsolePipeline())
-	gogodjzhuSpider.DownloadCoroutineNum(3)
-	gogodjzhuSpider.DownloadInterval(5 * time.Second)
-	gogodjzhuSpider.AddStartUrl("https://movie.douban.com/", "https://movie.douban.com/chart")
-	gogodjzhuSpider.Start()
+	doubanMovieSpider := src.NewSpider(&DoubanMovieProc{})
+	doubanMovieSpider.Downloader(downloader.NewSimpleDownloader(10*time.Second, nil))
+	doubanMovieSpider.Pipeline(pipeline.NewConsolePipeline())
+	doubanMovieSpider.DownloadCoroutineNum(3)
+	doubanMovieSpider.DownloadInterval(5 * time.Second)
+	doubanMovieSpider.AddStartUrl("https://movie.douban.com/", "https://movie.douban.com/chart")
+	doubanMovieSpider.Start()
 }

@@ -12,8 +12,8 @@ type SimpleProcessor struct {
 	urlPattern string
 }
 
-func NewSimpleProcessor(urlPattern string) SimpleProcessor {
-	return SimpleProcessor{urlPattern: urlPattern}
+func NewSimpleProcessor(urlPattern string) *SimpleProcessor {
+	return &SimpleProcessor{urlPattern: urlPattern}
 }
 
 func (this *SimpleProcessor) Process(page entity.IPage) error {
