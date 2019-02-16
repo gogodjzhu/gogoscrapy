@@ -1,4 +1,4 @@
-> An easy using web scrapy tool write by golang.
+> An easy using web scrapy tool written by golang.
 
 This project follow the design of [https://github.com/code4craft/webmagic](https://github.com/code4craft/webmagic). The architecture of `gogoscrapy` is just the same as `webmagic`.
 
