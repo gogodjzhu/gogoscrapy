@@ -25,6 +25,7 @@ func (this *DoubanMovieProc) Process(page entity.IPage) error {
 		url := strings.Split(node.Text(), "#")[0]
 		if strings.HasPrefix(url, "https://movie.douban.com/subject/") {
 			req := entity.NewRequest(url).SetUseProxy(false)
+			//req.SetPriority(3)//set the priority if you want, greater will be processed first
 			reqs = append(reqs, req)
 		}
 	}
