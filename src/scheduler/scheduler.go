@@ -23,18 +23,20 @@ const (
 )
 
 type QueueScheduler struct {
-	remover DuplicateRemover
-	queue   *utils.AsyncQueue
-	stat    atomic.Value
+	remover            DuplicateRemover
+	queue              *utils.AsyncQueue
+	asyncPriorityQueue *utils.AsyncPriorityQueue
+	stat               atomic.Value
 }
 
 func NewQueueScheduler() *QueueScheduler {
 	running := atomic.Value{}
 	running.Store(StatRunning)
 	return &QueueScheduler{
-		stat:    running,
-		queue:   utils.NewAsyncQueue(),
-		remover: NewMemDuplicateRemover(),
+		stat:               running,
+		queue:              utils.NewAsyncQueue(),
+		asyncPriorityQueue: utils.NewAsyncPriorityQueue(),
+		remover:            NewMemDuplicateRemover(),
 	}
 }
 
@@ -44,15 +46,33 @@ func (this *QueueScheduler) Push(req entity.IRequest) {
 	}
 	if noNeedToRemoveDuplicate(req) || !this.remover.IsDuplicate(req) {
 		log.Logf("push req, %+s", req.GetUrl())
-		this.queue.Push(req)
+		if req.GetPriority() > 0 {
+			this.pushWithPriority(req, req.GetPriority())
+		} else {
+			this.queue.Push(req)
+		}
 	} else if req.IsRetry() {
 		log.Logf("push retry req, %+s", req.GetUrl())
-		this.queue.Push(req)
+		if req.GetPriority() > 0 {
+			this.pushWithPriority(req, req.GetPriority())
+		} else {
+			this.queue.Push(req)
+		}
 	}
 }
 
+func (this *QueueScheduler) pushWithPriority(req entity.IRequest, priority int64) {
+	this.asyncPriorityQueue.PushWithPriority(req, priority)
+}
+
 func (this *QueueScheduler) Poll() entity.IRequest {
-	ret := this.queue.Pop()
+	ret := this.asyncPriorityQueue.Pop()
+	if ret != nil {
+		req := ret.(entity.IRequest)
+		log.Logf("poll req, %+s", req.GetUrl())
+		return req
+	}
+	ret = this.queue.Pop()
 	if ret != nil {
 		req := ret.(entity.IRequest)
 		log.Logf("poll req, %+s", req.GetUrl())
