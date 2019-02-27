@@ -5,6 +5,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/pkg/errors"
 	"gogoscrapy/src/entity"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -48,6 +49,10 @@ func (this *simpleDownloader) Download(request entity.IRequest) (entity.IPage, e
 	if err != nil {
 		return nil, err
 	}
+	bytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
 	defer resp.Body.Close()
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
@@ -56,7 +61,22 @@ func (this *simpleDownloader) Download(request entity.IRequest) (entity.IPage, e
 	if proxy != nil {
 		this.proxyFactory.ReturnProxy(proxy)
 	}
-	return entity.NewPage(request, doc, request.GetCharset(), resp.StatusCode, resp.Header, false), nil
+	return entity.NewPage(request, doc, getCharset(resp.Header), resp.StatusCode, resp.Header, string(bytes), false), nil
+}
+
+func getCharset(header http.Header) string {
+	if len(strings.TrimSpace(header.Get("Content-Type"))) > 0 {
+		//eg. application/json; charset=utf-8
+		contentTypeStr := header.Get("Content-Type")
+		ctArr := strings.Split(contentTypeStr, ";")
+		for _, pair := range ctArr {
+			kvArr := strings.Split(strings.TrimSpace(pair), "=")
+			if len(kvArr) == 2 && kvArr[0] == "charset" {
+				return kvArr[1]
+			}
+		}
+	}
+	return ""
 }
 
 func (this *simpleDownloader) SetDownloadTimeout(dt time.Duration) {

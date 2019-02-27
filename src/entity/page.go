@@ -21,6 +21,7 @@ type IPage interface {
 	GetUrl() *selector.PlainText
 	StoreField(key string, obj interface{})
 	GetResultItems() IResultItems
+	GetRawText() string
 }
 
 type Page struct {
@@ -32,12 +33,13 @@ type Page struct {
 	TargetRequests []IRequest
 	RespHeaders    map[string][]string
 	Url            *selector.PlainText
+	rawText        string
 	resultItems    IResultItems
 	domain         string
 }
 
 func NewPage(request IRequest, document *goquery.Document, charset string, status int,
-	respHeader map[string][]string, skip bool) *Page {
+	respHeader map[string][]string, rawText string, skip bool) *Page {
 	return &Page{
 		Request:        request,
 		Document:       document,
@@ -56,6 +58,7 @@ func NewPage(request IRequest, document *goquery.Document, charset string, statu
 			}
 			return u.Scheme + "://" + u.Host
 		}(),
+		rawText: rawText,
 	}
 }
 
@@ -93,7 +96,7 @@ func (this *Page) AddTargetRequestUrls(urlStrs ...string) {
 }
 
 //add request
-func (this *Page) AddTargetRequests(requests ...IRequest)  {
+func (this *Page) AddTargetRequests(requests ...IRequest) {
 	for _, req := range requests {
 		urlStr := req.GetUrl()
 		if urlStr == "" || urlStr == "#" || strings.HasPrefix(urlStr, "javascript:") {
@@ -134,4 +137,8 @@ func (this *Page) StoreField(key string, obj interface{}) {
 
 func (this *Page) GetResultItems() IResultItems {
 	return this.resultItems
+}
+
+func (this *Page) GetRawText() string {
+	return this.rawText
 }
