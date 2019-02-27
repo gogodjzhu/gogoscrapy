@@ -26,6 +26,10 @@ type Proxy struct {
 	password string
 }
 
+func NewProxy(id int, host string, port int, username, password string) Proxy {
+	return Proxy{id: id, host: host, port: port, username: username, password: password}
+}
+
 func (this Proxy) GetId() int {
 	return this.id
 }
