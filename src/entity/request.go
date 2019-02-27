@@ -44,7 +44,7 @@ func NewRequest(url string) IRequest {
 		Extras:   map[string]interface{}{},
 		Cookies:  map[string]string{},
 		Headers:  map[string][]string{},
-		Priority: 0,
+		Priority: -1,
 		Charset:  "UTF-8",
 		UseProxy: false,
 	}
