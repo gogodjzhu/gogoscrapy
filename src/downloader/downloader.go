@@ -5,7 +5,6 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/pkg/errors"
 	"gogoscrapy/src/entity"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -49,19 +48,37 @@ func (this *simpleDownloader) Download(request entity.IRequest) (entity.IPage, e
 	if err != nil {
 		return nil, err
 	}
-	bytes, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
 		return nil, err
 	}
+	rawText, err := getRawText(resp.Header, doc)
+	if err != nil {
+		log.Warnf("failed to get html from document, err:%+v", err)
+		return nil, err
+	}
+	defer resp.Body.Close()
 	if proxy != nil {
 		this.proxyFactory.ReturnProxy(proxy)
 	}
-	return entity.NewPage(request, doc, getCharset(resp.Header), resp.StatusCode, resp.Header, string(bytes), false), nil
+	return entity.NewPage(request, doc, getCharset(resp.Header), resp.StatusCode, resp.Header, rawText, false), nil
+}
+
+func getRawText(header http.Header, doc *goquery.Document) (string, error) {
+	if len(strings.TrimSpace(header.Get("Content-Type"))) > 0 {
+		//eg. application/json; charset=utf-8
+		contentTypeStr := header.Get("Content-Type")
+		ctArr := strings.Split(contentTypeStr, ";")
+		for _, pair := range ctArr {
+			switch {
+			case strings.TrimSpace(pair) == "application/json":
+				return doc.Text(), nil
+			case strings.TrimSpace(pair) == "text/html":
+				return doc.Html()
+			}
+		}
+	}
+	return doc.Html()
 }
 
 func getCharset(header http.Header) string {
