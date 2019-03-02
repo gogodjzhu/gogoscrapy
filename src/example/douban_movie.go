@@ -5,6 +5,7 @@ import (
 	"gogoscrapy/src/downloader"
 	"gogoscrapy/src/entity"
 	"gogoscrapy/src/pipeline"
+	"gogoscrapy/src/utils"
 	"strings"
 	"sunteng/commons/log"
 	"time"
@@ -17,7 +18,7 @@ type DoubanMovieProc struct {
 func (this *DoubanMovieProc) Process(page entity.IPage) error {
 	defer func() {
 		if err := recover(); err != nil {
-			log.Errorf("failed to process page, url:%s, err:%+v", page.GetUrl().Text(), err)
+			log.Errorf("failed to process page, url:%s\nstackTrace:%s\nerr:%+v", page.GetUrl().Text(), utils.GetStackTrace(), err)
 		}
 	}()
 	var reqs []entity.IRequest
