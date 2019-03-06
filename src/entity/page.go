@@ -85,13 +85,8 @@ func (this *Page) GetStatusCode() int {
 //add raw request url
 func (this *Page) AddTargetRequestUrls(urlStrs ...string) {
 	for _, urlStr := range urlStrs {
-		if urlStr == "" || urlStr == "#" || strings.HasPrefix(urlStr, "javascript:") {
-			continue
-		}
-		if urlStr = this.canonicalizeUrl(urlStr); urlStr != "" {
-			req := NewRequest(urlStr)
-			this.TargetRequests = append(this.TargetRequests, req)
-		}
+		req := NewRequest(urlStr)
+		this.AddTargetRequests(req)
 	}
 }
 
@@ -102,9 +97,10 @@ func (this *Page) AddTargetRequests(requests ...IRequest) {
 		if urlStr == "" || urlStr == "#" || strings.HasPrefix(urlStr, "javascript:") {
 			continue
 		}
-		if urlStr = this.canonicalizeUrl(urlStr); urlStr != "" {
-			this.TargetRequests = append(this.TargetRequests, req)
+		if urlStr = this.canonicalizeUrl(urlStr); urlStr == "" {
+			continue
 		}
+		this.TargetRequests = append(this.TargetRequests, req)
 	}
 }
 
