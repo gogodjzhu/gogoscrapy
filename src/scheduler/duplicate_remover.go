@@ -3,6 +3,8 @@ package scheduler
 import (
 	"gogoscrapy/src/entity"
 	"gogoscrapy/src/utils"
+	"gogoscrapy/src/utils/redisUtil"
+	"sunteng/commons/log"
 )
 
 type DuplicateRemover interface {
@@ -32,16 +34,44 @@ func (this *MemDuplicateRemover) GetTotalCount() int {
 }
 
 type RedisDuplicateRemover struct {
+	pfkey string
+}
+
+func NewRedisDuplicatedRemover(config redisUtil.Config, pfkey string) (*RedisDuplicateRemover, error) {
+	if err := redisUtil.Init(config); err != nil {
+		return nil, err
+	} else {
+		return &RedisDuplicateRemover{pfkey: pfkey}, nil
+	}
 }
 
 func (this *RedisDuplicateRemover) IsDuplicate(request entity.IRequest) bool {
-	panic("implement me")
+	conn := redisUtil.GetConn()
+	defer conn.Close()
+	res, err := conn.Do("PFADD", this.pfkey, request.GetUrl())
+	if err != nil {
+		log.Warnf("failed to PFADD to redis so treat this as NotDuplicate, err:%+v", err)
+		return false
+	}
+	return res == 1
 }
 
 func (this *RedisDuplicateRemover) ResetDuplicate() {
-	panic("implement me")
+	conn := redisUtil.GetConn()
+	defer conn.Close()
+	_, err := conn.Do("DEL", this.pfkey)
+	if err != nil {
+		log.Warnf("failed to DEL HyperLogLog key, err:%+v", err)
+	}
 }
 
 func (this *RedisDuplicateRemover) GetTotalCount() int {
-	panic("implement me")
+	conn := redisUtil.GetConn()
+	defer conn.Close()
+	res, err := conn.Do("PFCOUNT", this.pfkey)
+	if err != nil {
+		log.Warnf("failed to PFCOUNT HyperLogLog key, err:%+v", err)
+		return 0
+	}
+	return res.(int)
 }
