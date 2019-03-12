@@ -73,6 +73,8 @@ func getRawText(header http.Header, doc *goquery.Document) (string, error) {
 			switch {
 			case strings.TrimSpace(pair) == "application/json":
 				return doc.Text(), nil
+			case strings.TrimSpace(pair) == "text/xml":
+				return doc.Find("body").Html()
 			case strings.TrimSpace(pair) == "text/html":
 				return doc.Html()
 			}
