@@ -141,6 +141,14 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:feece64517a25b2ffe2a82f2df04255b9914ce3fbfd5263fce681479510990c1"
+  name = "golang.org/x/exp"
+  packages = ["mmap"]
+  pruneopts = "UT"
+  revision = "a1d7652674e8f269b17d9be90d3c4c1d0e8830e8"
+
+[[projects]]
+  branch = "master"
   digest = "1:de4815ce3ca5b624af2733716ecd471de1ef50cda8afec39491aab517f73139c"
   name = "golang.org/x/net"
   packages = [
@@ -190,7 +198,11 @@
     "github.com/gomodule/redigo/redis",
     "github.com/jinzhu/gorm",
     "github.com/pkg/errors",
+    "go.mongodb.org/mongo-driver/bson",
     "go.mongodb.org/mongo-driver/mongo",
+    "go.mongodb.org/mongo-driver/mongo/options",
+    "go.mongodb.org/mongo-driver/mongo/readpref",
+    "golang.org/x/exp/mmap",
     "golang.org/x/net/html",
   ]
   solver-name = "gps-cdcl"
