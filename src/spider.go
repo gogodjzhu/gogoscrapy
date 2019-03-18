@@ -120,10 +120,10 @@ func (this *spider) doScrapy() error {
 			time.Sleep(30 * time.Second)
 			log.Logf("task remain in scheduler: %d, downloading: %d", this.scheduler.Size(), downloadingNum)
 			//if downloading task is none then shutdown
-			if this.scheduler.IsClose() || this.scheduler.Size() < 1 {
+			if this.scheduler.IsClose() || (this.scheduler.Size() < 1 && downloadingNum < 1) {
 				//wait and double check
 				time.Sleep(30 * time.Second)
-				if this.scheduler.IsClose() || this.scheduler.Size() < 1 {
+				if this.scheduler.IsClose() || (this.scheduler.Size() < 1 && downloadingNum < 1) {
 					log.Logf("no more task to download, shutdown it gracefully.")
 					this.Shutdown()
 				}
