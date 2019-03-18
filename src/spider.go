@@ -36,7 +36,7 @@ type spider struct {
 	processorChan          chan entity.IPage
 	processorCoroutineNum  int
 	retryTime              int
-	downloadInterval time.Duration
+	downloadInterval       time.Duration
 }
 
 func NewSpider(proc processor.IProcessor) *spider {
@@ -74,7 +74,7 @@ func (this *spider) AddStartUrl(urls ...string) {
 	if this.startRequests == nil {
 		this.startRequests = make([]entity.IRequest, 0)
 	}
-	for _,url := range urls{
+	for _, url := range urls {
 		this.startRequests = append(this.startRequests, &entity.Request{Url: url})
 	}
 }
@@ -91,7 +91,7 @@ func (this *spider) RetryTime(rt int) *spider {
 	return this
 }
 
-func (this *spider) DownloadInterval(di time.Duration) *spider  {
+func (this *spider) DownloadInterval(di time.Duration) *spider {
 	this.downloadInterval = di
 	return this
 }
@@ -120,10 +120,10 @@ func (this *spider) doScrapy() error {
 			time.Sleep(30 * time.Second)
 			log.Logf("task remain in scheduler: %d, downloading: %d", this.scheduler.Size(), downloadingNum)
 			//if downloading task is none then shutdown
-			if this.scheduler.IsClose() || this.scheduler.Size() < 1{
+			if this.scheduler.IsClose() || this.scheduler.Size() < 1 {
 				//wait and double check
 				time.Sleep(30 * time.Second)
-				if this.scheduler.IsClose() || this.scheduler.Size() < 1{
+				if this.scheduler.IsClose() || this.scheduler.Size() < 1 {
 					log.Logf("no more task to download, shutdown it gracefully.")
 					this.Shutdown()
 				}
@@ -169,6 +169,7 @@ func (this *spider) doScrapy() error {
 			for page := range this.processorChan {
 				if err := this.processor.Process(page); err != nil {
 					log.Errorf("processor failed to process, err:%+v", err)
+					this.doRetry(page.GetRequest())
 					continue
 				}
 				for _, req := range page.GetTargetRequests() {
@@ -236,7 +237,7 @@ func (this *spider) IsShutdown() bool {
 //init spider and set the params
 func (this *spider) init() {
 	if this.downloader == nil {
-		this.downloader = downloader.NewSimpleDownloader(10 * time.Second, nil)
+		this.downloader = downloader.NewSimpleDownloader(10*time.Second, nil)
 	}
 	if this.downloaderCoroutineNum < 1 {
 		this.downloaderCoroutineNum = 1
@@ -250,10 +251,10 @@ func (this *spider) init() {
 	if this.scheduler == nil {
 		this.scheduler = scheduler.NewQueueScheduler()
 	}
-	if this.retryTime < 1{
+	if this.retryTime < 1 {
 		this.retryTime = 3
 	}
-	if this.downloadInterval < 1{
+	if this.downloadInterval < 1 {
 		this.downloadInterval = 10 * time.Second
 	}
 	for _, request := range this.startRequests {
