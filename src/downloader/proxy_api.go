@@ -61,8 +61,15 @@ type ApiProxyFactory struct {
 	bucketServiceCode string
 }
 
-func NewApiProxyFactory(oauth2Client, oauth2ClientSecret, oauth2Host, proxyServerHost, bucketName string) (ApiProxyFactory, error) {
-	token, err := getAccessToken(oauth2Host, proxyServerHost)
+func NewApiProxyFactory(
+	username,
+	password,
+	oauth2Client,
+	oauth2ClientSecret,
+	oauth2Host,
+	proxyServerHost,
+	bucketName string) (ApiProxyFactory, error) {
+	token, err := getAccessToken(username, password, oauth2Host, proxyServerHost)
 	if err != nil {
 		return ApiProxyFactory{}, err
 	}
@@ -108,8 +115,8 @@ func (this *ApiProxyFactory) refreshToken() error {
 	return nil
 }
 
-func getOauth2LoginCookie(oauth2Host string) (*http.Cookie, error) {
-	resp, err := http.Get(oauth2Host + "/v1/user/login?username=gogodjzhu&password=pass1123")
+func getOauth2LoginCookie(oauth2Host, username, password string) (*http.Cookie, error) {
+	resp, err := http.Get(oauth2Host + "/v1/user/login?username=" + username + "&password=" + password)
 	defer resp.Body.Close()
 	if err != nil {
 		return nil, err
@@ -156,8 +163,8 @@ func getAuthorizeUrl(serverHost string) (string, error) {
 	return resp.Data, nil
 }
 
-func getAccessToken(oauth2Host, serverHost string) (*AccessToken, error) {
-	cookie, err := getOauth2LoginCookie(oauth2Host)
+func getAccessToken(username, password, oauth2Host, serverHost string) (*AccessToken, error) {
+	cookie, err := getOauth2LoginCookie(oauth2Host, username, password)
 	if err != nil {
 		return nil, err
 	}
