@@ -19,51 +19,51 @@ type IProxy interface {
 }
 
 type Proxy struct {
-	id       int
-	host     string
-	port     int
-	username string
-	password string
+	Id       int    `json:"id"`
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	Username string `json:"username"`
+	Password string `json:"password"`
 }
 
 func NewProxy(id int, host string, port int, username, password string) Proxy {
-	return Proxy{id: id, host: host, port: port, username: username, password: password}
+	return Proxy{Id: id, Host: host, Port: port, Username: username, Password: password}
 }
 
 func (this Proxy) GetId() int {
-	return this.id
+	return this.Id
 }
 
 func (this Proxy) GetHost() string {
-	return this.host
+	return this.Host
 }
 
 func (this Proxy) GetPort() int {
-	return this.port
+	return this.Port
 }
 
 func (this Proxy) GetUsername() string {
-	return this.username
+	return this.Username
 }
 
 func (this Proxy) GetPassword() string {
-	return this.password
+	return this.Password
 }
 
 func (this Proxy) equals(proxy Proxy) bool {
 	if this == proxy {
 		return true
 	}
-	if this.host != proxy.host {
+	if this.Host != proxy.Host {
 		return false
 	}
-	if this.port != proxy.port {
+	if this.Port != proxy.Port {
 		return false
 	}
-	if this.username != proxy.username {
+	if this.Username != proxy.Username {
 		return false
 	}
-	if this.password != proxy.password {
+	if this.Password != proxy.Password {
 		return false
 	}
 	return true
@@ -75,7 +75,7 @@ type IProxyFactory interface {
 }
 
 // read proxy file and produce Proxy
-// line format: {address} {port}
+// line format: {address} {Port}
 type FileProxyFactory struct {
 	fileUrl    string //file path
 	proxyCache []IProxy
@@ -126,7 +126,7 @@ func (this *FileProxyFactory) init() error {
 			if err != nil {
 				return err
 			}
-			this.proxyCache = append(this.proxyCache, Proxy{host: host, port: port})
+			this.proxyCache = append(this.proxyCache, Proxy{Host: host, Port: port})
 		}
 	}
 	this.inited = true
