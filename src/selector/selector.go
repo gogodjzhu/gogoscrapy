@@ -3,11 +3,13 @@ package selector
 import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/pkg/errors"
+	"gogoscrapy/src/utils"
 	"golang.org/x/net/html"
 	"regexp"
 	"strings"
-	"sunteng/commons/log"
 )
+
+var LOG = utils.NewLogger()
 
 type Selector interface {
 	SelectString(src string) string
@@ -76,7 +78,7 @@ func (this CssSelector) SelectList(node *html.Node) []string {
 
 func (this CssSelector) SelectNode(node *html.Node) *html.Node {
 	if this.AttrName != "" {
-		log.Warn("CssSelector.SelectNode() ignore AttrName")
+		LOG.Warn("CssSelector.SelectNode() ignore AttrName")
 	}
 	nodes := goquery.NewDocumentFromNode(node).Find(this.SelectorText).Nodes
 	if len(nodes) < 1 {
@@ -106,7 +108,7 @@ func (this CssSelector) getValue(node *html.Node) string {
 		result, _ = doc.Attr(this.AttrName)
 	}
 	if err != nil {
-		log.Errorf("failed to getValue, err：%+v", err)
+		LOG.Errorf("failed to getValue, err：%+v", err)
 		return ""
 	}
 	if this.Pretty {

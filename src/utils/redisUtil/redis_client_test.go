@@ -37,6 +37,6 @@ func TestPFADD(t *testing.T) {
 	if res, err := conn.Do("PFADD", "pfadd", "gogodjzhu"); err != nil {
 		t.Errorf("test failed @ TestGetConn, err:%+v", err)
 	} else {
-		t.Log(res)
+		t.Info(res)
 	}
 }

@@ -7,9 +7,11 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 	"gogoscrapy/src/entity"
-	"sunteng/commons/log"
+	"gogoscrapy/src/utils"
 	"time"
 )
+
+var LOG = utils.NewLogger()
 
 type IPipeline interface {
 	Process(items entity.IResultItems) error
@@ -23,7 +25,7 @@ func NewConsolePipeline() ConsolePipeline {
 }
 
 func (ConsolePipeline) Process(items entity.IResultItems) error {
-	log.Logf("items :%+v", items)
+	LOG.Infof("items :%+v", items)
 	return nil
 }
 

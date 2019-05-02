@@ -2,11 +2,11 @@ package downloader
 
 import (
 	"bufio"
+	"gogoscrapy/src/utils"
 	"io"
 	"os"
 	"strconv"
 	"strings"
-	"sunteng/commons/util"
 	"sync/atomic"
 )
 
@@ -81,7 +81,7 @@ type FileProxyFactory struct {
 	proxyCache []IProxy
 	inited     bool
 	index      *int32
-	proxyQueue *util.AsyncQueue
+	proxyQueue *utils.AsyncQueue
 }
 
 func NewFileProxyFactory(fileUrl string) (*FileProxyFactory, error) {
@@ -91,7 +91,7 @@ func NewFileProxyFactory(fileUrl string) (*FileProxyFactory, error) {
 		proxyCache: make([]IProxy, 0),
 		inited:     false,
 		index:      &i,
-		proxyQueue: &util.AsyncQueue{},
+		proxyQueue: &utils.AsyncQueue{},
 	}
 	if err := fileProxyFactory.init(); err != nil {
 		return nil, err

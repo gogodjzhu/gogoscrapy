@@ -4,10 +4,11 @@ import (
 	"gogoscrapy/src/entity"
 	"gogoscrapy/src/utils"
 	"net/http"
-	"sunteng/commons/log"
 	"sync/atomic"
 	"time"
 )
+
+var LOG = utils.NewLogger()
 
 type IScheduler interface {
 	entity.Closeable
@@ -45,14 +46,14 @@ func (this *QueueScheduler) Push(req entity.IRequest) {
 		return
 	}
 	if noNeedToRemoveDuplicate(req) || !this.remover.IsDuplicate(req) {
-		log.Logf("push req, %+s", req.GetUrl())
+		LOG.Infof("push req, %+s", req.GetUrl())
 		if req.GetPriority() > 0 {
 			this.pushWithPriority(req, req.GetPriority())
 		} else {
 			this.queue.Push(req)
 		}
 	} else if req.IsRetry() {
-		log.Logf("push retry req, %+s", req.GetUrl())
+		LOG.Infof("push retry req, %+s", req.GetUrl())
 		if req.GetPriority() > 0 {
 			this.pushWithPriority(req, req.GetPriority())
 		} else {
@@ -69,13 +70,13 @@ func (this *QueueScheduler) Poll() entity.IRequest {
 	ret := this.asyncPriorityQueue.Pop()
 	if ret != nil {
 		req := ret.(entity.IRequest)
-		log.Logf("poll req, %+s", req.GetUrl())
+		LOG.Infof("poll req, %+s", req.GetUrl())
 		return req
 	}
 	ret = this.queue.Pop()
 	if ret != nil {
 		req := ret.(entity.IRequest)
-		log.Logf("poll req, %+s", req.GetUrl())
+		LOG.Infof("poll req, %+s", req.GetUrl())
 		return req
 	} else {
 		return nil
@@ -90,7 +91,7 @@ func (this *QueueScheduler) Close() error {
 	this.stat.Store(StatClosing)
 	for !this.queue.IsEmpty() {
 		time.Sleep(1 * time.Second)
-		log.Logf("schedule waiting queue clear, left size:%d", this.queue.Len())
+		LOG.Infof("schedule waiting queue clear, left size:%d", this.queue.Len())
 	}
 	this.stat.Store(StatClosed)
 	return nil

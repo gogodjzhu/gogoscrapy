@@ -1,15 +1,17 @@
 package main
 
 import (
+	"fmt"
+	"github.com/pkg/errors"
 	"gogoscrapy/src"
 	"gogoscrapy/src/downloader"
 	"gogoscrapy/src/entity"
-	"gogoscrapy/src/pipeline"
 	"gogoscrapy/src/utils"
 	"strings"
-	"sunteng/commons/log"
 	"time"
 )
+
+var LOG = utils.NewLogger()
 
 type DoubanMovieProc struct {
 }
@@ -18,9 +20,12 @@ type DoubanMovieProc struct {
 func (this *DoubanMovieProc) Process(page entity.IPage) error {
 	defer func() {
 		if err := recover(); err != nil {
-			log.Errorf("failed to process page, url:%s\nstackTrace:%s\nerr:%+v", page.GetUrl().Text(), utils.GetStackTrace(), err)
+			LOG.Errorf("failed to process page, url:%s\nstackTrace:%s\nerr:%+v", page.GetUrl().Text(), utils.GetStackTrace(), err)
 		}
 	}()
+	for _, link := range page.GetHtmlNode().Links().Nodes() {
+		fmt.Println(link)
+	}
 	var reqs []entity.IRequest
 	for _, node := range page.GetHtmlNode().Links().Regex(`https://movie.douban.com/subject/[0-9]+/`).Nodes() {
 		url := strings.Split(node.Text(), "#")[0]
@@ -42,6 +47,9 @@ func (this *DoubanMovieProc) Process(page entity.IPage) error {
 	page.StoreField("mid", url[len("https://movie.douban.com/subject/"):len(url)-1])
 	for _, node := range page.GetHtmlNode().Css("#content > h1 > span:nth-child(1)").Nodes() {
 		page.StoreField("title", node.Text())
+	}
+	if len(page.GetHtmlNode().Css("#content > h1 > span:nth-child(1)").Nodes()) == 0 {
+		return errors.New("page content invalid, html:" + page.GetRawText())
 	}
 	for _, node := range page.GetHtmlNode().Css("#interest_sectl > div.rating_wrap.clearbox > div.rating_self.clearfix > strong").Nodes() {
 		page.StoreField("rating", node.Text())
@@ -79,15 +87,16 @@ func (this *DoubanMovieProc) Process(page entity.IPage) error {
 			}
 		}
 	}
+	page.StoreField("tbl", "t_movies")
 	return nil
 }
 
 func main() {
-	doubanMovieSpider := src.NewSpider(&DoubanMovieProc{})
-	doubanMovieSpider.Downloader(downloader.NewSimpleDownloader(10*time.Second, nil))
-	doubanMovieSpider.Pipeline(pipeline.NewConsolePipeline())
-	doubanMovieSpider.DownloadCoroutineNum(3)
-	doubanMovieSpider.DownloadInterval(5 * time.Second)
-	doubanMovieSpider.AddStartUrl("https://movie.douban.com/", "https://movie.douban.com/chart")
-	doubanMovieSpider.Start()
+	spider := src.NewSpider(&DoubanMovieProc{})
+	spider.Downloader(downloader.NewSimpleDownloader(10*time.Second, nil))
+	spider.DownloadCoroutineNum(1)
+	spider.DownloadInterval(5 * time.Second)
+	spider.RetryTime(10)
+	spider.AddStartUrl("https://movie.douban.com/", "https://movie.douban.com/chart")
+	spider.Start()
 }

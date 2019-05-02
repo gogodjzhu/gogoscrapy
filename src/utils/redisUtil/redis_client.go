@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"github.com/gomodule/redigo/redis"
 	"github.com/pkg/errors"
-	"sunteng/commons/log"
+	"gogoscrapy/src/utils"
 	"time"
 )
+
+var LOG = utils.NewLogger()
 
 var redisPool *redis.Pool
 var isStarted bool
@@ -49,6 +51,6 @@ func GetConn() redis.Conn {
 
 func Close() {
 	if err := redisPool.Close(); err != nil {
-		log.Warnf("failed to close redis pool, err:%+v", err)
+		LOG.Warnf("failed to close redis pool, err:%+v", err)
 	}
 }

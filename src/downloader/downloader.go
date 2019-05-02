@@ -5,13 +5,15 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/pkg/errors"
 	"gogoscrapy/src/entity"
+	"gogoscrapy/src/utils"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
-	"sunteng/commons/log"
 	"time"
 )
+
+var LOG = utils.NewLogger()
 
 type IDownloader interface {
 	Download(request entity.IRequest) (entity.IPage, error)
@@ -54,7 +56,7 @@ func (this *simpleDownloader) Download(request entity.IRequest) (entity.IPage, e
 	}
 	rawText, err := getRawText(resp.Header, doc)
 	if err != nil {
-		log.Warnf("failed to get html from document, err:%+v", err)
+		LOG.Warnf("failed to get html from document, err:%+v", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
@@ -103,11 +105,11 @@ func (this *simpleDownloader) SetDownloadTimeout(dt time.Duration) {
 }
 
 func (this *simpleDownloader) OnSuccess(request entity.IRequest) {
-	log.Debugf("success download page, url:%s", request.GetUrl())
+	LOG.Debugf("success download page, url:%s", request.GetUrl())
 }
 
 func (this *simpleDownloader) OnError(request entity.IRequest, err error) {
-	log.Warnf("failed to download page, request:%+v, err:%+v", request, err)
+	LOG.Warnf("failed to download page, request:%+v, err:%+v", request, err)
 }
 
 func (this *simpleDownloader) getHttpRequest(request entity.IRequest) (*http.Client, IProxy, error) {

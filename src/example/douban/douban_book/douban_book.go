@@ -3,15 +3,16 @@ package main
 import (
 	"bytes"
 	"github.com/PuerkitoBio/goquery"
+	"github.com/pkg/errors"
 	"gogoscrapy/src"
 	"gogoscrapy/src/downloader"
 	"gogoscrapy/src/entity"
-	"gogoscrapy/src/pipeline"
 	"gogoscrapy/src/utils"
 	"strings"
-	"sunteng/commons/log"
 	"time"
 )
+
+var LOG = utils.NewLogger()
 
 type DoubanBookProc struct {
 }
@@ -20,14 +21,14 @@ type DoubanBookProc struct {
 func (this *DoubanBookProc) Process(page entity.IPage) error {
 	defer func() {
 		if err := recover(); err != nil {
-			log.Errorf("failed to process page, url:%s\nstackTrace:%s\nerr:%+v", page.GetUrl().Text(), utils.GetStackTrace(), err)
+			LOG.Errorf("failed to process page, url:%s\nstackTrace:%s\nerr:%+v", page.GetUrl().Text(), utils.GetStackTrace(), err)
 		}
 	}()
 	var reqs []entity.IRequest
 	for _, node := range page.GetHtmlNode().Links().Regex(`https://book.douban.com/subject/[0-9]+/`).Nodes() {
 		url := strings.Split(node.Text(), "#")[0]
 		if strings.HasPrefix(url, "https://book.douban.com/subject/") {
-			req := entity.NewRequest(url).SetUseProxy(false)
+			req := entity.NewRequest(url).SetUseProxy(true)
 			//req.SetPriority(3)//set the priority if you want, greater will be processed first
 			reqs = append(reqs, req)
 		}
@@ -44,6 +45,9 @@ func (this *DoubanBookProc) Process(page entity.IPage) error {
 	page.StoreField("mid", url[len("https://book.douban.com/subject/"):len(url)-1])
 	for _, node := range page.GetHtmlNode().Css("#wrapper > h1 > span").Nodes() {
 		page.StoreField("title", node.Text())
+	}
+	if len(page.GetHtmlNode().Css("#wrapper > h1 > span").Nodes()) == 0 {
+		return errors.New("page content invalid, html:" + page.GetRawText())
 	}
 	for _, node := range page.GetHtmlNode().Css("#interest_sectl > div > div.rating_self.clearfix > strong").Nodes() {
 		page.StoreField("rating", node.Text())
@@ -100,15 +104,16 @@ func (this *DoubanBookProc) Process(page entity.IPage) error {
 			}
 		}
 	}
+	page.StoreField("tbl", "t_books")
 	return nil
 }
 
 func main() {
-	doubanMovieSpider := src.NewSpider(&DoubanBookProc{})
-	doubanMovieSpider.Downloader(downloader.NewSimpleDownloader(10*time.Second, nil))
-	doubanMovieSpider.Pipeline(pipeline.NewConsolePipeline())
-	doubanMovieSpider.DownloadCoroutineNum(1)
-	doubanMovieSpider.DownloadInterval(5 * time.Second)
-	doubanMovieSpider.AddStartUrl("https://book.douban.com/subject/27081847/")
-	doubanMovieSpider.Start()
+	spider := src.NewSpider(&DoubanBookProc{})
+	spider.Downloader(downloader.NewSimpleDownloader(10*time.Second, nil))
+	spider.DownloadCoroutineNum(1)
+	spider.DownloadInterval(5 * time.Second)
+	spider.RetryTime(10)
+	spider.AddStartUrl("https://book.douban.com/subject/27081847/")
+	spider.Start()
 }
