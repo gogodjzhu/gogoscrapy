@@ -8,7 +8,7 @@ type MysqlProxyFactory struct {
 	proxyMapper *src.ProxyMapper
 }
 
-func NewApiProxyFactory(config *src.MySqlConfig) (*MysqlProxyFactory, error) {
+func NewMysqlProxyFactory(config *src.MySqlConfig) (*MysqlProxyFactory, error) {
 	persist, err := src.NewPersistence(config)
 	if err != nil {
 		return nil, err
