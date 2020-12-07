@@ -1,7 +1,7 @@
 package utils
 
 import (
-	"go/src/container/heap"
+	"container/heap"
 	"sync"
 	"testing"
 )
