@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"encoding/json"
 	"github.com/gogodjzhu/gogoscrapy/entity"
 	"github.com/gogodjzhu/gogoscrapy/utils"
 )
@@ -19,6 +20,8 @@ func NewConsolePipeline() ConsolePipeline {
 }
 
 func (ConsolePipeline) Process(items entity.IResultItems) error {
-	LOG.Infof("items :%+v", items)
+	if bs, err := json.Marshal(items); err == nil {
+		LOG.Infof("items:%s", string(bs))
+	}
 	return nil
 }

@@ -2,11 +2,12 @@ package gogoscrapy
 
 import (
 	"github.com/gogodjzhu/gogoscrapy/downloader"
-	entity2 "github.com/gogodjzhu/gogoscrapy/entity"
+	"github.com/gogodjzhu/gogoscrapy/entity"
 	"github.com/gogodjzhu/gogoscrapy/pipeline"
 	"github.com/gogodjzhu/gogoscrapy/processor"
 	"github.com/gogodjzhu/gogoscrapy/scheduler"
 	"github.com/gogodjzhu/gogoscrapy/utils"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -32,10 +33,10 @@ type spider struct {
 	scheduler scheduler.IScheduler
 
 	stat          atomic.Value
-	startRequests []entity2.IRequest
+	startRequests []entity.IRequest
 
 	downloaderCoroutineNum int
-	processorChan          chan entity2.IPage
+	processorChan          chan entity.IPage
 	processorCoroutineNum  int
 	retryTime              int
 	downloadInterval       time.Duration
@@ -74,16 +75,16 @@ func (this *spider) DownloadCoroutineNum(num int) *spider {
 
 func (this *spider) AddStartUrl(urls ...string) {
 	if this.startRequests == nil {
-		this.startRequests = make([]entity2.IRequest, 0)
+		this.startRequests = make([]entity.IRequest, 0)
 	}
 	for _, url := range urls {
-		this.startRequests = append(this.startRequests, &entity2.Request{Url: url})
+		this.startRequests = append(this.startRequests, &entity.Request{Url: url, Method: http.MethodGet})
 	}
 }
 
-func (this *spider) AddStartRequest(request entity2.IRequest) {
+func (this *spider) AddStartRequest(request entity.IRequest) {
 	if this.startRequests == nil {
-		this.startRequests = make([]entity2.IRequest, 0)
+		this.startRequests = make([]entity.IRequest, 0)
 	}
 	this.startRequests = append(this.startRequests, request)
 }
@@ -195,15 +196,15 @@ func (this *spider) doScrapy() error {
 	return nil
 }
 
-func (this *spider) doRetry(req entity2.IRequest) {
+func (this *spider) doRetry(req entity.IRequest) {
 	var nextTimes int
-	times := req.GetExtras()[entity2.CycleTriedTimes]
+	times := req.GetExtras()[entity.CycleTriedTimes]
 	if times == nil {
 		nextTimes = 1
 	} else {
 		nextTimes = times.(int) + 1
 	}
-	req.PutExtra(entity2.CycleTriedTimes, nextTimes)
+	req.PutExtra(entity.CycleTriedTimes, nextTimes)
 	if nextTimes <= this.retryTime {
 		this.scheduler.Push(req)
 	} else {
@@ -225,7 +226,7 @@ func (this *spider) Shutdown() {
 }
 
 func tryClose(closeable interface{}) {
-	if c, ok := closeable.(entity2.Closeable); ok {
+	if c, ok := closeable.(entity.Closeable); ok {
 		if err := c.Close(); err != nil {
 			LOG.Warnf("failed to close %+v, err:%+v", c, err)
 		}
@@ -263,6 +264,6 @@ func (this *spider) init() {
 		this.scheduler.Push(request)
 	}
 	this.startRequests = nil //clear object
-	this.processorChan = make(chan entity2.IPage, 1)
+	this.processorChan = make(chan entity.IPage, 1)
 	this.stat.Store(StatInit)
 }

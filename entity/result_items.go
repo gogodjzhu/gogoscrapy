@@ -8,29 +8,29 @@ type IResultItems interface {
 }
 
 type ResultItems struct {
-	items map[string]interface{}
-	skip  bool
+	Items map[string]interface{}
+	Skip  bool
 }
 
 func NewResultItems(skip bool) *ResultItems {
 	return &ResultItems{
-		items: make(map[string]interface{}),
-		skip:  skip,
+		Items: make(map[string]interface{}),
+		Skip:  skip,
 	}
 }
 
 func (this *ResultItems) Get(key string) interface{} {
-	return this.items[key]
+	return this.Items[key]
 }
 
 func (this *ResultItems) Put(key string, value interface{}) {
-	this.items[key] = value
+	this.Items[key] = value
 }
 
 func (this *ResultItems) IsSkip() bool {
-	return this.skip
+	return this.Skip
 }
 
 func (this *ResultItems) All() map[string]interface{} {
-	return this.items
+	return this.Items
 }
