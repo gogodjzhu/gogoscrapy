@@ -23,17 +23,17 @@ type IDownloader interface {
 	Validate(page ent.IPage) (bool, string)
 }
 
-type simpleDownloader struct {
+type SimpleDownloader struct {
 	downloadTimeout time.Duration
 	proxyFactory    IProxyFactory
 }
 
-func NewSimpleDownloader(downloadTimeout time.Duration, provider IProxyFactory) *simpleDownloader {
-	return &simpleDownloader{downloadTimeout: downloadTimeout, proxyFactory: provider}
+func NewSimpleDownloader(downloadTimeout time.Duration, provider IProxyFactory) *SimpleDownloader {
+	return &SimpleDownloader{downloadTimeout: downloadTimeout, proxyFactory: provider}
 }
 
-func (this *simpleDownloader) Download(request ent.IRequest) (ent.IPage, error) {
-	client, proxy, err := this.getHttpRequest(request)
+func (rd *SimpleDownloader) Download(request ent.IRequest) (ent.IPage, error) {
+	client, proxy, err := rd.getHttpRequest(request)
 	if err != nil {
 		return nil, err
 	}
@@ -64,11 +64,11 @@ func (this *simpleDownloader) Download(request ent.IRequest) (ent.IPage, error) 
 	}
 	defer resp.Body.Close()
 	page := ent.NewPage(request, doc, getCharset(resp.Header), resp.StatusCode, resp.Header, rawText, false)
-	if valid, msg := this.Validate(page); !valid {
+	if valid, msg := rd.Validate(page); !valid {
 		return nil, errors.New(msg)
 	}
 	if proxy != nil {
-		this.proxyFactory.ReturnProxy(proxy)
+		rd.proxyFactory.ReturnProxy(proxy)
 	}
 	return page, nil
 }
@@ -107,32 +107,32 @@ func getCharset(header http.Header) string {
 	return ""
 }
 
-func (this *simpleDownloader) SetDownloadTimeout(dt time.Duration) {
-	this.downloadTimeout = dt
+func (rd *SimpleDownloader) SetDownloadTimeout(dt time.Duration) {
+	rd.downloadTimeout = dt
 }
 
-func (this *simpleDownloader) OnSuccess(request ent.IRequest) {
+func (rd *SimpleDownloader) OnSuccess(request ent.IRequest) {
 	LOG.Debugf("success download page, url:%s", request.GetUrl())
 }
 
-func (this *simpleDownloader) OnError(request ent.IRequest, err error) {
+func (rd *SimpleDownloader) OnError(request ent.IRequest, err error) {
 	LOG.Warnf("failed to download page, request:%+v, err:%+v", request, err)
 }
 
-func (this *simpleDownloader) Validate(ent.IPage) (bool, string) {
+func (rd *SimpleDownloader) Validate(ent.IPage) (bool, string) {
 	return true, "ok"
 }
 
-func (this *simpleDownloader) getHttpRequest(request ent.IRequest) (*http.Client, IProxy, error) {
-	client := http.Client{Timeout: this.downloadTimeout}
+func (rd *SimpleDownloader) getHttpRequest(request ent.IRequest) (*http.Client, IProxy, error) {
+	client := http.Client{Timeout: rd.downloadTimeout}
 	var proxy IProxy
 	var err error
 	var urlProxy *url.URL
 	if request.IsUseProxy() {
-		if this.proxyFactory == nil {
+		if rd.proxyFactory == nil {
 			return nil, nil, errors.New("request want to use proxy but proxyProvider is nil")
 		}
-		proxy, err = this.proxyFactory.GetProxy()
+		proxy, err = rd.proxyFactory.GetProxy()
 		if err != nil {
 			return nil, nil, errors.New(fmt.Sprintf("failed to get proxy, error:%+v", err))
 		}
