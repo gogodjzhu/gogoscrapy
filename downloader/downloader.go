@@ -3,7 +3,7 @@ package downloader
 import (
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
-	entity2 "github.com/gogodjzhu/gogoscrapy/entity"
+	ent "github.com/gogodjzhu/gogoscrapy/entity"
 	"github.com/gogodjzhu/gogoscrapy/utils"
 	"github.com/pkg/errors"
 	"net/http"
@@ -16,10 +16,11 @@ import (
 var LOG = utils.NewLogger()
 
 type IDownloader interface {
-	Download(request entity2.IRequest) (entity2.IPage, error)
+	Download(request ent.IRequest) (ent.IPage, error)
 	SetDownloadTimeout(dt time.Duration)
-	OnSuccess(request entity2.IRequest)
-	OnError(request entity2.IRequest, err error)
+	OnSuccess(request ent.IRequest)
+	OnError(request ent.IRequest, err error)
+	Validate(page ent.IPage) (bool, string)
 }
 
 type simpleDownloader struct {
@@ -31,7 +32,7 @@ func NewSimpleDownloader(downloadTimeout time.Duration, provider IProxyFactory) 
 	return &simpleDownloader{downloadTimeout: downloadTimeout, proxyFactory: provider}
 }
 
-func (this *simpleDownloader) Download(request entity2.IRequest) (entity2.IPage, error) {
+func (this *simpleDownloader) Download(request ent.IRequest) (ent.IPage, error) {
 	client, proxy, err := this.getHttpRequest(request)
 	if err != nil {
 		return nil, err
@@ -62,10 +63,14 @@ func (this *simpleDownloader) Download(request entity2.IRequest) (entity2.IPage,
 		return nil, err
 	}
 	defer resp.Body.Close()
+	page := ent.NewPage(request, doc, getCharset(resp.Header), resp.StatusCode, resp.Header, rawText, false)
+	if valid, msg := this.Validate(page); !valid {
+		return nil, errors.New(msg)
+	}
 	if proxy != nil {
 		this.proxyFactory.ReturnProxy(proxy)
 	}
-	return entity2.NewPage(request, doc, getCharset(resp.Header), resp.StatusCode, resp.Header, rawText, false), nil
+	return page, nil
 }
 
 func getRawText(header http.Header, doc *goquery.Document) (string, error) {
@@ -106,15 +111,19 @@ func (this *simpleDownloader) SetDownloadTimeout(dt time.Duration) {
 	this.downloadTimeout = dt
 }
 
-func (this *simpleDownloader) OnSuccess(request entity2.IRequest) {
+func (this *simpleDownloader) OnSuccess(request ent.IRequest) {
 	LOG.Debugf("success download page, url:%s", request.GetUrl())
 }
 
-func (this *simpleDownloader) OnError(request entity2.IRequest, err error) {
+func (this *simpleDownloader) OnError(request ent.IRequest, err error) {
 	LOG.Warnf("failed to download page, request:%+v, err:%+v", request, err)
 }
 
-func (this *simpleDownloader) getHttpRequest(request entity2.IRequest) (*http.Client, IProxy, error) {
+func (this *simpleDownloader) Validate(ent.IPage) (bool, string) {
+	return true, "ok"
+}
+
+func (this *simpleDownloader) getHttpRequest(request ent.IRequest) (*http.Client, IProxy, error) {
 	client := http.Client{Timeout: this.downloadTimeout}
 	var proxy IProxy
 	var err error
