@@ -46,72 +46,72 @@ func NewSpider(proc processor.IProcessor) *spider {
 	}
 }
 
-func (this *spider) Downloader(downloader downloader.IDownloader) *spider {
-	this.downloader = downloader
-	return this
+func (sp *spider) Downloader(downloader downloader.IDownloader) *spider {
+	sp.downloader = downloader
+	return sp
 }
 
-func (this *spider) Pipeline(pipeline pipeline.IPipeline) *spider {
-	this.pipelines = append(this.pipelines, pipeline)
-	return this
+func (sp *spider) Pipeline(pipeline pipeline.IPipeline) *spider {
+	sp.pipelines = append(sp.pipelines, pipeline)
+	return sp
 }
 
-func (this *spider) Processor(processor processor.IProcessor) *spider {
-	this.processor = processor
-	return this
+func (sp *spider) Processor(processor processor.IProcessor) *spider {
+	sp.processor = processor
+	return sp
 }
 
-func (this *spider) Scheduler(scheduler scheduler.IScheduler) *spider {
-	this.scheduler = scheduler
-	return this
+func (sp *spider) Scheduler(scheduler scheduler.IScheduler) *spider {
+	sp.scheduler = scheduler
+	return sp
 }
 
-func (this *spider) DownloadCoroutineNum(num int) *spider {
-	this.downloaderCoroutineNum = num
-	return this
+func (sp *spider) DownloadCoroutineNum(num int) *spider {
+	sp.downloaderCoroutineNum = num
+	return sp
 }
 
-func (this *spider) AddStartUrl(urls ...string) {
-	if this.startRequests == nil {
-		this.startRequests = make([]entity.IRequest, 0)
+func (sp *spider) AddStartUrl(urls ...string) {
+	if sp.startRequests == nil {
+		sp.startRequests = make([]entity.IRequest, 0)
 	}
 	for _, url := range urls {
-		this.startRequests = append(this.startRequests, &entity.Request{Url: url, Method: http.MethodGet})
+		sp.startRequests = append(sp.startRequests, &entity.Request{Url: url, Method: http.MethodGet})
 	}
 }
 
-func (this *spider) AddStartRequest(request entity.IRequest) {
-	if this.startRequests == nil {
-		this.startRequests = make([]entity.IRequest, 0)
+func (sp *spider) AddStartRequest(request entity.IRequest) {
+	if sp.startRequests == nil {
+		sp.startRequests = make([]entity.IRequest, 0)
 	}
-	this.startRequests = append(this.startRequests, request)
+	sp.startRequests = append(sp.startRequests, request)
 }
 
-func (this *spider) RetryTime(rt int) *spider {
-	this.retryTime = rt
-	return this
+func (sp *spider) RetryTime(rt int) *spider {
+	sp.retryTime = rt
+	return sp
 }
 
-func (this *spider) DownloadInterval(di time.Duration) *spider {
-	this.downloadInterval = di
-	return this
+func (sp *spider) DownloadInterval(di time.Duration) *spider {
+	sp.downloadInterval = di
+	return sp
 }
 
-func (this *spider) Start() {
-	if this.stat.Load() == StatRunning {
+func (sp *spider) Start() {
+	if sp.stat.Load() == StatRunning {
 		panic("spider is already running.")
 	}
-	this.init()
-	this.stat.Store(StatRunning)
-	if this.stat.Load() == StatRunning {
-		if err := this.doScrapy(); err != nil {
+	sp.init()
+	sp.stat.Store(StatRunning)
+	if sp.stat.Load() == StatRunning {
+		if err := sp.doScrapy(); err != nil {
 			log.Errorf("failed scrapy, err:%+v", err)
 		}
 	}
 }
 
 // actually scrapy page
-func (this *spider) doScrapy() error {
+func (sp *spider) doScrapy() error {
 	wg := sync.WaitGroup{}
 	var downloadingNum int32
 
@@ -119,27 +119,27 @@ func (this *spider) doScrapy() error {
 	go func() {
 		for {
 			time.Sleep(30 * time.Second)
-			log.Infof("task remain in scheduler: %d, downloading: %d", this.scheduler.Size(), downloadingNum)
+			log.Infof("task remain in scheduler: %d, downloading: %d", sp.scheduler.Size(), downloadingNum)
 			//if downloading task is none then shutdown
-			if this.scheduler.IsClose() || (this.scheduler.Size() < 1 && downloadingNum < 1) {
+			if sp.scheduler.IsClose() || (sp.scheduler.Size() < 1 && downloadingNum < 1) {
 				//wait and double check
 				time.Sleep(30 * time.Second)
-				if this.scheduler.IsClose() || (this.scheduler.Size() < 1 && downloadingNum < 1) {
+				if sp.scheduler.IsClose() || (sp.scheduler.Size() < 1 && downloadingNum < 1) {
 					log.Infof("no more task to download, shutdown it gracefully.")
-					this.Shutdown()
+					sp.Shutdown()
 				}
 			}
 		}
 	}()
 
 	//parallel downloader
-	for i := 0; i < this.downloaderCoroutineNum; i++ {
+	for i := 0; i < sp.downloaderCoroutineNum; i++ {
 		wg.Add(1)
 		go func(index int) {
 			for {
-				req := this.scheduler.Poll()
+				req := sp.scheduler.Poll()
 				if req == nil {
-					if this.scheduler.IsClose() {
+					if sp.scheduler.IsClose() {
 						break
 					}
 					//wait next request
@@ -148,16 +148,15 @@ func (this *spider) doScrapy() error {
 					continue
 				}
 				atomic.AddInt32(&downloadingNum, 1)
-				if page, err := this.downloader.Download(req); err != nil {
-					log.Warnln("failed to download")
-					log.Debugf("failed to download, error:%+v", err)
-					this.doRetry(req)
+				if page, err := sp.downloader.Download(req); err != nil {
+					sp.onDownloadFail(req, err)
+					sp.doRetry(req)
 				} else {
-					log.Debugf("success download, url:%+s", req.GetUrl())
-					this.processorChan <- page
+					sp.onDownloadSuccess(req, page)
+					sp.processorChan <- page
 				}
 				atomic.AddInt32(&downloadingNum, -1)
-				time.Sleep(this.downloadInterval)
+				time.Sleep(sp.downloadInterval)
 			}
 			log.Infof("downloader[%d] end.", index)
 			wg.Done()
@@ -165,20 +164,20 @@ func (this *spider) doScrapy() error {
 	}
 
 	//parallel processor
-	for i := 0; i < this.processorCoroutineNum; i++ {
+	for i := 0; i < sp.processorCoroutineNum; i++ {
 		wg.Add(1)
 		go func(index int) {
-			for page := range this.processorChan {
-				if err := this.processor.Process(page); err != nil {
+			for page := range sp.processorChan {
+				if err := sp.processor.Process(page); err != nil {
 					log.Errorf("processor failed to process, err:%+v", err)
-					this.doRetry(page.GetRequest())
+					sp.doRetry(page.GetRequest())
 					continue
 				}
 				for _, req := range page.GetTargetRequests() {
-					this.scheduler.Push(req)
+					sp.scheduler.Push(req)
 				}
 				if !page.GetResultItems().IsSkip() {
-					for _, pipe := range this.pipelines {
+					for _, pipe := range sp.pipelines {
 						if err := pipe.Process(page.GetResultItems()); err != nil {
 							log.Errorf("pipeline[%+v] failed to process, err:%+v", pipe, err)
 							continue
@@ -195,7 +194,7 @@ func (this *spider) doScrapy() error {
 	return nil
 }
 
-func (this *spider) doRetry(req entity.IRequest) {
+func (sp *spider) doRetry(req entity.IRequest) {
 	var nextTimes int
 	times := req.GetExtras()[entity.CycleTriedTimes]
 	if times == nil {
@@ -204,24 +203,24 @@ func (this *spider) doRetry(req entity.IRequest) {
 		nextTimes = times.(int) + 1
 	}
 	req.PutExtra(entity.CycleTriedTimes, nextTimes)
-	if nextTimes <= this.retryTime {
-		this.scheduler.Push(req)
+	if nextTimes <= sp.retryTime {
+		sp.scheduler.Push(req)
 	} else {
 		log.Warn("give up download for retry time over")
 	}
 }
 
-func (this *spider) Shutdown() {
-	this.stat.Store(StatInit)
+func (sp *spider) Shutdown() {
+	sp.stat.Store(StatInit)
 	log.Infof("shutdown...")
-	tryClose(this.downloader)
-	tryClose(this.scheduler)
-	close(this.processorChan)
-	tryClose(this.processor)
-	for pipe := range this.pipelines {
+	tryClose(sp.downloader)
+	tryClose(sp.scheduler)
+	close(sp.processorChan)
+	tryClose(sp.processor)
+	for pipe := range sp.pipelines {
 		tryClose(pipe)
 	}
-	this.stat.Store(StatStopped)
+	sp.stat.Store(StatStopped)
 }
 
 func tryClose(closeable interface{}) {
@@ -232,37 +231,55 @@ func tryClose(closeable interface{}) {
 	}
 }
 
-func (this *spider) IsShutdown() bool {
-	return this.stat.Load().(int) == StatStopped
+func (sp *spider) IsShutdown() bool {
+	return sp.stat.Load().(int) == StatStopped
 }
 
 //init spider and set the params
-func (this *spider) init() {
-	if this.downloader == nil {
-		this.downloader = downloader.NewSimpleDownloader(10*time.Second, nil)
+func (sp *spider) init() {
+	if sp.downloader == nil {
+		sp.downloader = downloader.NewSimpleDownloader(10*time.Second, nil)
 	}
-	if this.downloaderCoroutineNum < 1 {
-		this.downloaderCoroutineNum = 1
+	if sp.downloaderCoroutineNum < 1 {
+		sp.downloaderCoroutineNum = 1
 	}
-	if this.processorCoroutineNum < 1 {
-		this.processorCoroutineNum = 1
+	if sp.processorCoroutineNum < 1 {
+		sp.processorCoroutineNum = 1
 	}
-	if this.pipelines == nil {
-		this.pipelines = append(this.pipelines, pipeline.NewConsolePipeline())
+	if sp.pipelines == nil {
+		sp.pipelines = append(sp.pipelines, pipeline.NewConsolePipeline())
 	}
-	if this.scheduler == nil {
-		this.scheduler = scheduler.NewQueueScheduler()
+	if sp.scheduler == nil {
+		sp.scheduler = scheduler.NewQueueScheduler()
 	}
-	if this.retryTime < 1 {
-		this.retryTime = 3
+	if sp.retryTime < 1 {
+		sp.retryTime = 3
 	}
-	if this.downloadInterval < 1 {
-		this.downloadInterval = 10 * time.Second
+	if sp.downloadInterval < 1 {
+		sp.downloadInterval = 10 * time.Second
 	}
-	for _, request := range this.startRequests {
-		this.scheduler.Push(request)
+	for _, request := range sp.startRequests {
+		sp.scheduler.Push(request)
 	}
-	this.startRequests = nil //clear object
-	this.processorChan = make(chan entity.IPage, 1)
-	this.stat.Store(StatInit)
+	sp.startRequests = nil //clear object
+	sp.processorChan = make(chan entity.IPage, 1)
+	sp.stat.Store(StatInit)
+}
+
+func (sp *spider) onDownloadSuccess(req entity.IRequest, page entity.IPage) {
+	codes := sp.downloader.GetAcceptStatus()
+	for _, code := range codes {
+		if code == page.GetStatusCode() {
+			proxy := req.GetExtras()[entity.AssignedProxy]
+			sp.downloader.GetProxyFactory().ReturnProxy(proxy.(downloader.IProxy))
+			delete(req.GetExtras(), entity.AssignedProxy)
+			return
+		}
+	}
+	log.Debugf("download failed, status code:%d, url:%s", page.GetStatusCode(), req.GetUrl())
+	sp.doRetry(req)
+}
+
+func (sp *spider) onDownloadFail(req entity.IRequest, err error) {
+	log.Debugf("download failed, err:%+v, url:%s", err, req.GetUrl())
 }

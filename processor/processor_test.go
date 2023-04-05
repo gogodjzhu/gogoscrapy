@@ -11,7 +11,7 @@ func TestSimpleProcessor_Process(t *testing.T) {
 	processor := NewSimpleProcessor("http://.*")
 	simpleDownloader := downloader.NewSimpleDownloader(10*time.Second, nil)
 
-	req := entity.NewRequest("http://www.baidu.com")
+	req := entity.NewGetRequest("http://www.baidu.com")
 	page, err := simpleDownloader.Download(req)
 	if err != nil {
 		simpleDownloader.OnError(req, err)

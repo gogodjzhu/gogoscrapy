@@ -3,6 +3,7 @@ package entity
 import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gogodjzhu/gogoscrapy/selector"
+	log "github.com/sirupsen/logrus"
 	"net/url"
 	"strings"
 )
@@ -85,7 +86,11 @@ func (this *Page) GetStatusCode() int {
 //add raw request url
 func (this *Page) AddTargetRequestUrls(urlStrs ...string) {
 	for _, urlStr := range urlStrs {
-		req := NewRequest(urlStr)
+		req, err := NewGetRequest(urlStr)
+		if err != nil {
+			log.Warnf("add target request url error: %s", err)
+			continue
+		}
 		this.AddTargetRequests(req)
 	}
 }

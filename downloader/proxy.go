@@ -2,9 +2,14 @@ package downloader
 
 import (
 	"bufio"
+	"errors"
+	"fmt"
 	"github.com/gogodjzhu/gogoscrapy/utils"
 	"io"
+	"net/http"
+	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -12,61 +17,38 @@ import (
 
 type IProxy interface {
 	GetId() int
-	GetHost() string
-	GetPort() int
-	GetUsername() string
-	GetPassword() string
+	GetTransport() *http.Transport
 }
 
 type Proxy struct {
-	Id       int    `json:"id"`
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Id   int    `json:"id"`
+	Host string `json:"host"`
+	Port int    `json:"port"`
+	Type string `json:"type"` //http or https or socks5
 }
 
-func NewProxy(id int, host string, port int, username, password string) Proxy {
-	return Proxy{Id: id, Host: host, Port: port, Username: username, Password: password}
-}
-
-func (this Proxy) GetId() int {
-	return this.Id
-}
-
-func (this Proxy) GetHost() string {
-	return this.Host
-}
-
-func (this Proxy) GetPort() int {
-	return this.Port
-}
-
-func (this Proxy) GetUsername() string {
-	return this.Username
-}
-
-func (this Proxy) GetPassword() string {
-	return this.Password
-}
-
-func (this Proxy) equals(proxy Proxy) bool {
-	if this == proxy {
-		return true
+func NewProxy(id int, host string, port int, typ string) (IProxy, error) {
+	// validate type
+	if !regexp.MustCompile(`^http|https|socks5$`).MatchString(typ) {
+		return nil, errors.New(fmt.Sprintf("invalid proxy type: %s", typ))
 	}
-	if this.Host != proxy.Host {
-		return false
+	// validate port
+	if port < 0 || port > 65535 {
+		return nil, errors.New(fmt.Sprintf("invalid proxy port: %d", port))
 	}
-	if this.Port != proxy.Port {
-		return false
+	return &Proxy{Id: id, Host: host, Port: port, Type: typ}, nil
+}
+
+func (p *Proxy) GetId() int {
+	return p.Id
+}
+
+func (p *Proxy) GetTransport() *http.Transport {
+	return &http.Transport{
+		Proxy: http.ProxyURL(&url.URL{
+			Host: fmt.Sprintf("%s://%s:%d", p.Type, p.Host, p.Port),
+		}),
 	}
-	if this.Username != proxy.Username {
-		return false
-	}
-	if this.Password != proxy.Password {
-		return false
-	}
-	return true
 }
 
 type IProxyFactory interface {
@@ -74,22 +56,20 @@ type IProxyFactory interface {
 	ReturnProxy(proxy IProxy)
 }
 
-// read proxy file and produce Proxy
-// line format: {address} {Port}
-type FileProxyFactory struct {
+// FileHttpProxyFactory read http proxy file and produce Proxy
+// line format: {address}:{Port}
+type FileHttpProxyFactory struct {
 	fileUrl    string //file path
 	proxyCache []IProxy
-	inited     bool
 	index      *int32
 	proxyQueue *utils.AsyncQueue
 }
 
-func NewFileProxyFactory(fileUrl string) (*FileProxyFactory, error) {
+func NewFileHttpProxyFactory(fileUrl string) (IProxyFactory, error) {
 	var i int32
-	fileProxyFactory := &FileProxyFactory{
+	fileProxyFactory := &FileHttpProxyFactory{
 		fileUrl:    fileUrl,
 		proxyCache: make([]IProxy, 0),
-		inited:     false,
 		index:      &i,
 		proxyQueue: &utils.AsyncQueue{},
 	}
@@ -99,12 +79,8 @@ func NewFileProxyFactory(fileUrl string) (*FileProxyFactory, error) {
 	return fileProxyFactory, nil
 }
 
-//not thread safe
-func (this *FileProxyFactory) init() error {
-	if this.inited {
-		return nil
-	}
-	fi, err := os.Open(this.fileUrl)
+func (fp *FileHttpProxyFactory) init() error {
+	fi, err := os.Open(fp.fileUrl)
 	if err != nil {
 		return err
 	}
@@ -113,32 +89,35 @@ func (this *FileProxyFactory) init() error {
 	br := bufio.NewReader(fi)
 
 	for {
-		if line, err := br.ReadString('\n'); err != nil {
+		if line, _, err := br.ReadLine(); err != nil {
 			if err == io.EOF {
 				break
 			}
 			return err
 		} else {
-			line = strings.TrimSpace(line)
-			arr := strings.Split(line, "\t")
+			str := strings.TrimSpace(string(line))
+			arr := strings.Split(str, ":")
 			host := arr[0]
 			port, err := strconv.Atoi(arr[1])
 			if err != nil {
 				return err
 			}
-			this.proxyCache = append(this.proxyCache, Proxy{Host: host, Port: port})
+			proxy, err := NewProxy(len(fp.proxyCache), host, port, "http")
+			if err != nil {
+				return err
+			}
+			fp.proxyCache = append(fp.proxyCache, proxy)
 		}
 	}
-	this.inited = true
 	return nil
 }
 
-func (this *FileProxyFactory) GetProxy() (IProxy, error) {
-	i := atomic.AddInt32(this.index, 1)
-	cleanIndex := i % int32(len(this.proxyCache))
-	return this.proxyCache[cleanIndex], nil
+func (fp *FileHttpProxyFactory) GetProxy() (IProxy, error) {
+	i := atomic.AddInt32(fp.index, 1)
+	cleanIndex := i % int32(len(fp.proxyCache))
+	return fp.proxyCache[cleanIndex], nil
 }
 
-func (this *FileProxyFactory) ReturnProxy(proxy IProxy) {
-	//FileProxyFactory just reuse the proxy circularly, not need to return proxy.
+func (fp *FileHttpProxyFactory) ReturnProxy(proxy IProxy) {
+	//FileHttpProxyFactory just reuse the proxy circularly, not need to return proxy.
 }

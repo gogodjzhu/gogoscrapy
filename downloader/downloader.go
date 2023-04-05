@@ -1,14 +1,11 @@
 package downloader
 
 import (
-	"fmt"
+	"bytes"
 	"github.com/PuerkitoBio/goquery"
 	ent "github.com/gogodjzhu/gogoscrapy/entity"
-	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"net/http"
-	"net/url"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -16,29 +13,45 @@ import (
 type IDownloader interface {
 	Download(request ent.IRequest) (ent.IPage, error)
 	SetDownloadTimeout(dt time.Duration)
-	OnSuccess(request ent.IRequest)
-	OnError(request ent.IRequest, err error)
-	Validate(page ent.IPage) (bool, string)
+	GetDownloadTimeout() time.Duration
+	SetProxyFactory(provider IProxyFactory)
+	GetProxyFactory() IProxyFactory
+	SetAcceptStatus(status []int)
+	GetAcceptStatus() []int
 }
 
 type SimpleDownloader struct {
 	downloadTimeout time.Duration
 	proxyFactory    IProxyFactory
+	acceptStatus    []int
 }
 
 func NewSimpleDownloader(downloadTimeout time.Duration, provider IProxyFactory) *SimpleDownloader {
-	return &SimpleDownloader{downloadTimeout: downloadTimeout, proxyFactory: provider}
+	return &SimpleDownloader{
+		downloadTimeout: downloadTimeout,
+		proxyFactory:    provider,
+		acceptStatus:    []int{200},
+	}
 }
 
 func (rd *SimpleDownloader) Download(request ent.IRequest) (ent.IPage, error) {
-	client, proxy, err := rd.getHttpRequest(request)
-	if err != nil {
+	var client *http.Client
+	var req *http.Request
+	var err error
+	if client, err = rd.wrapClient(request); err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequest(request.GetMethod(), request.GetUrl(), strings.NewReader(""))
-	if err != nil {
-		return nil, err
+	if request.GetBody() != nil {
+		if req, err = http.NewRequest(request.GetMethod(), request.GetUrl(), bytes.NewReader(request.GetBody())); err != nil {
+			return nil, err
+		}
+	} else {
+		if req, err = http.NewRequest(request.GetMethod(), request.GetUrl(), nil); err != nil {
+			return nil, err
+		}
 	}
+
+	// set headers
 	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.116 Safari/537.36")
 	req.Header.Set("Accept", "*/*")
 	headers := request.GetHeaders()
@@ -51,6 +64,7 @@ func (rd *SimpleDownloader) Download(request ent.IRequest) (ent.IPage, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
 		return nil, err
@@ -60,15 +74,7 @@ func (rd *SimpleDownloader) Download(request ent.IRequest) (ent.IPage, error) {
 		log.Warnf("failed to get html from document, err:%+v", err)
 		return nil, err
 	}
-	defer resp.Body.Close()
-	page := ent.NewPage(request, doc, getCharset(resp.Header), resp.StatusCode, resp.Header, rawText, false)
-	if valid, msg := rd.Validate(page); !valid {
-		return nil, errors.New(msg)
-	}
-	if proxy != nil {
-		rd.proxyFactory.ReturnProxy(proxy)
-	}
-	return page, nil
+	return ent.NewPage(request, doc, getCharset(resp.Header), resp.StatusCode, resp.Header, rawText, false), nil
 }
 
 func getRawText(header http.Header, doc *goquery.Document) (string, error) {
@@ -109,39 +115,42 @@ func (rd *SimpleDownloader) SetDownloadTimeout(dt time.Duration) {
 	rd.downloadTimeout = dt
 }
 
-func (rd *SimpleDownloader) OnSuccess(request ent.IRequest) {
-	log.Debugf("success download page, url:%s", request.GetUrl())
+func (rd *SimpleDownloader) GetDownloadTimeout() time.Duration {
+	return rd.downloadTimeout
 }
 
-func (rd *SimpleDownloader) OnError(request ent.IRequest, err error) {
-	log.Warnf("failed to download page, request:%+v, err:%+v", request, err)
+func (rd *SimpleDownloader) SetProxyFactory(provider IProxyFactory) {
+	rd.proxyFactory = provider
 }
 
-func (rd *SimpleDownloader) Validate(ent.IPage) (bool, string) {
-	return true, "ok"
+func (rd *SimpleDownloader) GetProxyFactory() IProxyFactory {
+	return rd.proxyFactory
 }
 
-func (rd *SimpleDownloader) getHttpRequest(request ent.IRequest) (*http.Client, IProxy, error) {
+func (rd *SimpleDownloader) SetAcceptStatus(status []int) {
+	rd.acceptStatus = status
+}
+
+func (rd *SimpleDownloader) GetAcceptStatus() []int {
+	return rd.acceptStatus
+}
+
+func (rd *SimpleDownloader) wrapClient(request ent.IRequest) (*http.Client, error) {
 	client := http.Client{Timeout: rd.downloadTimeout}
+	if !request.IsUseProxy() {
+		return &client, nil
+	}
 	var proxy IProxy
 	var err error
-	var urlProxy *url.URL
-	if request.IsUseProxy() {
-		if rd.proxyFactory == nil {
-			return nil, nil, errors.New("request want to use proxy but proxyProvider is nil")
-		}
-		proxy, err = rd.proxyFactory.GetProxy()
-		if err != nil {
-			return nil, nil, errors.New(fmt.Sprintf("failed to get proxy, error:%+v", err))
-		}
-		urlProxy, err = url.Parse("http://" + proxy.GetHost() + ":" + strconv.Itoa(proxy.GetPort()))
-		if err != nil {
-			return nil, nil, errors.New(fmt.Sprintf("failed to get proxy, error:%+v", err))
-		}
+	if rd.proxyFactory == nil {
+		log.Warn("request want to use proxy but proxyProvider is nil, use default client")
+		return &client, nil
 	}
-
-	client.Transport = &http.Transport{
-		Proxy: http.ProxyURL(urlProxy),
+	if proxy, err = rd.proxyFactory.GetProxy(); err != nil {
+		log.Warn("failed to get proxy, use default client")
+		return &client, nil
 	}
-	return &client, proxy, nil
+	request.PutExtra(ent.AssignedProxy, proxy)
+	client.Transport = proxy.GetTransport()
+	return &client, nil
 }

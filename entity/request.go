@@ -1,11 +1,17 @@
 package entity
 
-import "net/http"
+import (
+	"errors"
+	"github.com/gogodjzhu/gogoscrapy/utils"
+	"net/http"
+)
 
 type IRequest interface {
 	GetUrl() string
 	GetMethod() string
 	SetMethod(method string) IRequest
+	GetBody() []byte
+	SetBody(body []byte) IRequest
 	GetExtras() map[string]interface{}
 	SetExtras(extras map[string]interface{}) IRequest
 	PutExtra(key string, value interface{}) IRequest
@@ -25,10 +31,12 @@ type IRequest interface {
 }
 
 const CycleTriedTimes = "__cycle_tried_times"
+const AssignedProxy = "__assigned_proxy"
 
 type Request struct {
 	Url      string
 	Method   string
+	Body     []byte
 	Extras   map[string]interface{}
 	Cookies  map[string]string
 	Headers  map[string][]string
@@ -37,100 +45,113 @@ type Request struct {
 	UseProxy bool
 }
 
-func NewRequest(url string) IRequest {
+func NewGetRequest(url string) (IRequest, error) {
+	if !utils.IsUrl(url) {
+		return nil, errors.New("url is not valid: " + url)
+	}
 	return &Request{
 		Url:      url,
 		Method:   http.MethodGet,
+		Body:     nil,
 		Extras:   map[string]interface{}{},
 		Cookies:  map[string]string{},
 		Headers:  map[string][]string{},
 		Priority: -1,
 		Charset:  "UTF-8",
 		UseProxy: false,
-	}
+	}, nil
 }
 
-func (this *Request) GetUrl() string {
-	return this.Url
+func (r *Request) GetUrl() string {
+	return r.Url
 }
 
-func (this *Request) GetMethod() string {
-	return this.Method
+func (r *Request) GetMethod() string {
+	return r.Method
 }
 
-func (this *Request) SetMethod(method string) IRequest {
-	this.Method = method
-	return this
+func (r *Request) SetMethod(method string) IRequest {
+	r.Method = method
+	return r
 }
 
-func (this *Request) GetExtras() map[string]interface{} {
-	return this.Extras
+func (r *Request) GetBody() []byte {
+	return r.Body
 }
 
-func (this *Request) SetExtras(extras map[string]interface{}) IRequest {
-	this.Extras = extras
-	return this
+func (r *Request) SetBody(body []byte) IRequest {
+	r.Body = body
+	return r
 }
 
-func (this *Request) PutExtra(key string, value interface{}) IRequest {
-	this.Extras[key] = value
-	return this
+func (r *Request) GetExtras() map[string]interface{} {
+	return r.Extras
 }
 
-func (this *Request) GetCookies() map[string]string {
-	return this.Cookies
+func (r *Request) SetExtras(extras map[string]interface{}) IRequest {
+	r.Extras = extras
+	return r
 }
 
-func (this *Request) SetCookies(cookies map[string]string) IRequest {
-	this.Cookies = cookies
-	return this
+func (r *Request) PutExtra(key string, value interface{}) IRequest {
+	r.Extras[key] = value
+	return r
 }
 
-func (this *Request) PutCookie(key, value string) IRequest {
-	this.Cookies[key] = value
-	return this
+func (r *Request) GetCookies() map[string]string {
+	return r.Cookies
 }
 
-func (this *Request) GetHeaders() map[string][]string {
-	return this.Headers
+func (r *Request) SetCookies(cookies map[string]string) IRequest {
+	r.Cookies = cookies
+	return r
 }
 
-func (this *Request) SetHeaders(headers map[string][]string) IRequest {
-	this.Headers = headers
-	return this
+func (r *Request) PutCookie(key, value string) IRequest {
+	r.Cookies[key] = value
+	return r
 }
 
-func (this *Request) PutHeader(key string, value []string) IRequest {
-	this.Headers[key] = value
-	return this
+func (r *Request) GetHeaders() map[string][]string {
+	return r.Headers
 }
 
-func (this *Request) GetPriority() int64 {
-	return this.Priority
+func (r *Request) SetHeaders(headers map[string][]string) IRequest {
+	r.Headers = headers
+	return r
 }
 
-func (this *Request) SetPriority(priority int64) IRequest {
-	return this
+func (r *Request) PutHeader(key string, value []string) IRequest {
+	r.Headers[key] = value
+	return r
 }
 
-func (this *Request) GetCharset() string {
-	return this.Charset
+func (r *Request) GetPriority() int64 {
+	return r.Priority
 }
 
-func (this *Request) SetCharset(charset string) IRequest {
-	this.Charset = charset
-	return this
+func (r *Request) SetPriority(priority int64) IRequest {
+	return r
 }
 
-func (this *Request) IsUseProxy() bool {
-	return this.UseProxy
+func (r *Request) GetCharset() string {
+	return r.Charset
 }
 
-func (this *Request) SetUseProxy(use bool) IRequest {
-	this.UseProxy = use
-	return this
+func (r *Request) SetCharset(charset string) IRequest {
+	r.Charset = charset
+	return r
 }
 
-func (this *Request) IsRetry() bool {
-	return this.Extras[CycleTriedTimes] != nil
+func (r *Request) IsUseProxy() bool {
+	return r.UseProxy
+}
+
+func (r *Request) SetUseProxy(use bool) IRequest {
+	r.UseProxy = use
+	return r
+}
+
+func (r *Request) IsRetry() bool {
+	return r.Extras[CycleTriedTimes] != nil
 }
