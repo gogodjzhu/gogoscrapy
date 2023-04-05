@@ -4,33 +4,32 @@ import (
 	"fmt"
 	"github.com/gogodjzhu/gogoscrapy"
 	"github.com/gogodjzhu/gogoscrapy/downloader"
-	entity2 "github.com/gogodjzhu/gogoscrapy/entity"
-	utils2 "github.com/gogodjzhu/gogoscrapy/utils"
+	ent "github.com/gogodjzhu/gogoscrapy/entity"
+	u "github.com/gogodjzhu/gogoscrapy/utils"
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 	"strings"
 	"time"
 )
-
-var LOG = utils2.NewLogger()
 
 type DoubanMovieProc struct {
 }
 
 //`Process` process the page and fetch the info we want.
-func (this *DoubanMovieProc) Process(page entity2.IPage) error {
+func (this *DoubanMovieProc) Process(page ent.IPage) error {
 	defer func() {
 		if err := recover(); err != nil {
-			LOG.Errorf("failed to process page, url:%s\nstackTrace:%s\nerr:%+v", page.GetUrl().Text(), utils2.GetStackTrace(), err)
+			log.Errorf("failed to process page, url:%s\nstackTrace:%s\nerr:%+v", page.GetUrl().Text(), u.GetStackTrace(), err)
 		}
 	}()
 	for _, link := range page.GetHtmlNode().Links().Nodes() {
 		fmt.Println(link)
 	}
-	var reqs []entity2.IRequest
+	var reqs []ent.IRequest
 	for _, node := range page.GetHtmlNode().Links().Regex(`https://movie.douban.com/subject/[0-9]+/`).Nodes() {
 		url := strings.Split(node.Text(), "#")[0]
 		if strings.HasPrefix(url, "https://movie.douban.com/subject/") {
-			req := entity2.NewRequest(url).SetUseProxy(false)
+			req := ent.NewRequest(url).SetUseProxy(false)
 			//req.SetPriority(3)//set the priority if you want, greater will be processed first
 			reqs = append(reqs, req)
 		}

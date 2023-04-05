@@ -4,16 +4,14 @@ import (
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	ent "github.com/gogodjzhu/gogoscrapy/entity"
-	"github.com/gogodjzhu/gogoscrapy/utils"
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
 )
-
-var LOG = utils.NewLogger()
 
 type IDownloader interface {
 	Download(request ent.IRequest) (ent.IPage, error)
@@ -59,7 +57,7 @@ func (rd *SimpleDownloader) Download(request ent.IRequest) (ent.IPage, error) {
 	}
 	rawText, err := getRawText(resp.Header, doc)
 	if err != nil {
-		LOG.Warnf("failed to get html from document, err:%+v", err)
+		log.Warnf("failed to get html from document, err:%+v", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
@@ -112,11 +110,11 @@ func (rd *SimpleDownloader) SetDownloadTimeout(dt time.Duration) {
 }
 
 func (rd *SimpleDownloader) OnSuccess(request ent.IRequest) {
-	LOG.Debugf("success download page, url:%s", request.GetUrl())
+	log.Debugf("success download page, url:%s", request.GetUrl())
 }
 
 func (rd *SimpleDownloader) OnError(request ent.IRequest, err error) {
-	LOG.Warnf("failed to download page, request:%+v, err:%+v", request, err)
+	log.Warnf("failed to download page, request:%+v, err:%+v", request, err)
 }
 
 func (rd *SimpleDownloader) Validate(ent.IPage) (bool, string) {

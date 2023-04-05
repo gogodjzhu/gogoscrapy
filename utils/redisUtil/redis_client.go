@@ -2,13 +2,11 @@ package redisUtil
 
 import (
 	"fmt"
-	"github.com/gogodjzhu/gogoscrapy/utils"
 	"github.com/gomodule/redigo/redis"
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 	"time"
 )
-
-var LOG = utils.NewLogger()
 
 var redisPool *redis.Pool
 var isStarted bool
@@ -51,6 +49,6 @@ func GetConn() redis.Conn {
 
 func Close() {
 	if err := redisPool.Close(); err != nil {
-		LOG.Warnf("failed to close redis pool, err:%+v", err)
+		log.Warnf("failed to close redis pool, err:%+v", err)
 	}
 }

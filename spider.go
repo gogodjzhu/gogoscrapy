@@ -6,14 +6,12 @@ import (
 	"github.com/gogodjzhu/gogoscrapy/pipeline"
 	"github.com/gogodjzhu/gogoscrapy/processor"
 	"github.com/gogodjzhu/gogoscrapy/scheduler"
-	"github.com/gogodjzhu/gogoscrapy/utils"
+	log "github.com/sirupsen/logrus"
 	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
 )
-
-var LOG = utils.NewLogger()
 
 type ISpider interface {
 	IApp
@@ -107,7 +105,7 @@ func (this *spider) Start() {
 	this.stat.Store(StatRunning)
 	if this.stat.Load() == StatRunning {
 		if err := this.doScrapy(); err != nil {
-			LOG.Errorf("failed scrapy, err:%+v", err)
+			log.Errorf("failed scrapy, err:%+v", err)
 		}
 	}
 }
@@ -121,13 +119,13 @@ func (this *spider) doScrapy() error {
 	go func() {
 		for {
 			time.Sleep(30 * time.Second)
-			LOG.Infof("task remain in scheduler: %d, downloading: %d", this.scheduler.Size(), downloadingNum)
+			log.Infof("task remain in scheduler: %d, downloading: %d", this.scheduler.Size(), downloadingNum)
 			//if downloading task is none then shutdown
 			if this.scheduler.IsClose() || (this.scheduler.Size() < 1 && downloadingNum < 1) {
 				//wait and double check
 				time.Sleep(30 * time.Second)
 				if this.scheduler.IsClose() || (this.scheduler.Size() < 1 && downloadingNum < 1) {
-					LOG.Infof("no more task to download, shutdown it gracefully.")
+					log.Infof("no more task to download, shutdown it gracefully.")
 					this.Shutdown()
 				}
 			}
@@ -146,21 +144,22 @@ func (this *spider) doScrapy() error {
 					}
 					//wait next request
 					time.Sleep(3 * time.Second)
-					LOG.Debugf("wait for next request")
+					log.Debugf("wait for next request")
 					continue
 				}
 				atomic.AddInt32(&downloadingNum, 1)
 				if page, err := this.downloader.Download(req); err != nil {
-					LOG.Warnf("failed to download, err：%+v", err)
+					log.Warnln("failed to download")
+					log.Debugf("failed to download, error:%+v", err)
 					this.doRetry(req)
 				} else {
-					LOG.Debugf("success download, url:%+s", req.GetUrl())
+					log.Debugf("success download, url:%+s", req.GetUrl())
 					this.processorChan <- page
 				}
 				atomic.AddInt32(&downloadingNum, -1)
 				time.Sleep(this.downloadInterval)
 			}
-			LOG.Infof("downloader[%d] end.", index)
+			log.Infof("downloader[%d] end.", index)
 			wg.Done()
 		}(i)
 	}
@@ -171,7 +170,7 @@ func (this *spider) doScrapy() error {
 		go func(index int) {
 			for page := range this.processorChan {
 				if err := this.processor.Process(page); err != nil {
-					LOG.Errorf("processor failed to process, err:%+v", err)
+					log.Errorf("processor failed to process, err:%+v", err)
 					this.doRetry(page.GetRequest())
 					continue
 				}
@@ -181,13 +180,13 @@ func (this *spider) doScrapy() error {
 				if !page.GetResultItems().IsSkip() {
 					for _, pipe := range this.pipelines {
 						if err := pipe.Process(page.GetResultItems()); err != nil {
-							LOG.Errorf("pipeline[%+v] failed to process, err:%+v", pipe, err)
+							log.Errorf("pipeline[%+v] failed to process, err:%+v", pipe, err)
 							continue
 						}
 					}
 				}
 			}
-			LOG.Infof("processor[%d] end.", index)
+			log.Infof("processor[%d] end.", index)
 			wg.Done()
 		}(i)
 	}
@@ -208,13 +207,13 @@ func (this *spider) doRetry(req entity.IRequest) {
 	if nextTimes <= this.retryTime {
 		this.scheduler.Push(req)
 	} else {
-		LOG.Warn("give up download for retry time over")
+		log.Warn("give up download for retry time over")
 	}
 }
 
 func (this *spider) Shutdown() {
 	this.stat.Store(StatInit)
-	LOG.Infof("shutdown...")
+	log.Infof("shutdown...")
 	tryClose(this.downloader)
 	tryClose(this.scheduler)
 	close(this.processorChan)
@@ -228,7 +227,7 @@ func (this *spider) Shutdown() {
 func tryClose(closeable interface{}) {
 	if c, ok := closeable.(entity.Closeable); ok {
 		if err := c.Close(); err != nil {
-			LOG.Warnf("failed to close %+v, err:%+v", c, err)
+			log.Warnf("failed to close %+v, err:%+v", c, err)
 		}
 	}
 }

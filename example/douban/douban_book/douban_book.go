@@ -8,11 +8,10 @@ import (
 	entity2 "github.com/gogodjzhu/gogoscrapy/entity"
 	utils2 "github.com/gogodjzhu/gogoscrapy/utils"
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 	"strings"
 	"time"
 )
-
-var LOG = utils2.NewLogger()
 
 type DoubanBookProc struct {
 }
@@ -21,7 +20,7 @@ type DoubanBookProc struct {
 func (this *DoubanBookProc) Process(page entity2.IPage) error {
 	defer func() {
 		if err := recover(); err != nil {
-			LOG.Errorf("failed to process page, url:%s\nstackTrace:%s\nerr:%+v", page.GetUrl().Text(), utils2.GetStackTrace(), err)
+			log.Errorf("failed to process page, url:%s\nstackTrace:%s\nerr:%+v", page.GetUrl().Text(), utils2.GetStackTrace(), err)
 		}
 	}()
 	var reqs []entity2.IRequest

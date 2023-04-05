@@ -3,10 +3,8 @@ package pipeline
 import (
 	"encoding/json"
 	"github.com/gogodjzhu/gogoscrapy/entity"
-	"github.com/gogodjzhu/gogoscrapy/utils"
+	log "github.com/sirupsen/logrus"
 )
-
-var LOG = utils.NewLogger()
 
 type IPipeline interface {
 	Process(items entity.IResultItems) error
@@ -21,7 +19,7 @@ func NewConsolePipeline() ConsolePipeline {
 
 func (ConsolePipeline) Process(items entity.IResultItems) error {
 	if bs, err := json.Marshal(items); err == nil {
-		LOG.Infof("items:%s", string(bs))
+		log.Infof("items:%s", string(bs))
 	}
 	return nil
 }

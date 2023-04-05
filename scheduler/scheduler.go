@@ -1,19 +1,18 @@
 package scheduler
 
 import (
-	entity2 "github.com/gogodjzhu/gogoscrapy/entity"
-	utils2 "github.com/gogodjzhu/gogoscrapy/utils"
+	ent "github.com/gogodjzhu/gogoscrapy/entity"
+	u "github.com/gogodjzhu/gogoscrapy/utils"
+	log "github.com/sirupsen/logrus"
 	"net/http"
 	"sync/atomic"
 	"time"
 )
 
-var LOG = utils2.NewLogger()
-
 type IScheduler interface {
-	entity2.Closeable
-	Push(request entity2.IRequest)
-	Poll() entity2.IRequest
+	ent.Closeable
+	Push(request ent.IRequest)
+	Poll() ent.IRequest
 	Size() int
 }
 
@@ -25,8 +24,8 @@ const (
 
 type QueueScheduler struct {
 	remover            DuplicateRemover
-	queue              *utils2.AsyncQueue
-	asyncPriorityQueue *utils2.AsyncPriorityQueue
+	queue              *u.AsyncQueue
+	asyncPriorityQueue *u.AsyncPriorityQueue
 	stat               atomic.Value
 }
 
@@ -35,25 +34,25 @@ func NewQueueScheduler() *QueueScheduler {
 	running.Store(StatRunning)
 	return &QueueScheduler{
 		stat:               running,
-		queue:              utils2.NewAsyncQueue(),
-		asyncPriorityQueue: utils2.NewAsyncPriorityQueue(),
+		queue:              u.NewAsyncQueue(),
+		asyncPriorityQueue: u.NewAsyncPriorityQueue(),
 		remover:            NewMemDuplicateRemover(),
 	}
 }
 
-func (this *QueueScheduler) Push(req entity2.IRequest) {
+func (this *QueueScheduler) Push(req ent.IRequest) {
 	if this.stat.Load() != StatRunning {
 		return
 	}
 	if noNeedToRemoveDuplicate(req) || !this.remover.IsDuplicate(req) {
-		LOG.Infof("push req, %+s", req.GetUrl())
+		log.Debugf("push req, %+s", req.GetUrl())
 		if req.GetPriority() > 0 {
 			this.pushWithPriority(req, req.GetPriority())
 		} else {
 			this.queue.Push(req)
 		}
 	} else if req.IsRetry() {
-		LOG.Infof("push retry req, %+s", req.GetUrl())
+		log.Debugf("push retry req, %+s", req.GetUrl())
 		if req.GetPriority() > 0 {
 			this.pushWithPriority(req, req.GetPriority())
 		} else {
@@ -62,21 +61,21 @@ func (this *QueueScheduler) Push(req entity2.IRequest) {
 	}
 }
 
-func (this *QueueScheduler) pushWithPriority(req entity2.IRequest, priority int64) {
+func (this *QueueScheduler) pushWithPriority(req ent.IRequest, priority int64) {
 	this.asyncPriorityQueue.PushWithPriority(req, priority)
 }
 
-func (this *QueueScheduler) Poll() entity2.IRequest {
+func (this *QueueScheduler) Poll() ent.IRequest {
 	ret := this.asyncPriorityQueue.Pop()
 	if ret != nil {
-		req := ret.(entity2.IRequest)
-		LOG.Infof("poll req, %+s", req.GetUrl())
+		req := ret.(ent.IRequest)
+		log.Infof("poll req, %+s", req.GetUrl())
 		return req
 	}
 	ret = this.queue.Pop()
 	if ret != nil {
-		req := ret.(entity2.IRequest)
-		LOG.Infof("poll req, %+s", req.GetUrl())
+		req := ret.(ent.IRequest)
+		log.Infof("poll req, %+s", req.GetUrl())
 		return req
 	} else {
 		return nil
@@ -91,7 +90,7 @@ func (this *QueueScheduler) Close() error {
 	this.stat.Store(StatClosing)
 	for !this.queue.IsEmpty() {
 		time.Sleep(1 * time.Second)
-		LOG.Infof("schedule waiting queue clear, left size:%d", this.queue.Len())
+		log.Infof("schedule waiting queue clear, left size:%d", this.queue.Len())
 	}
 	this.stat.Store(StatClosed)
 	return nil
@@ -101,6 +100,6 @@ func (this *QueueScheduler) IsClose() bool {
 	return this.stat.Load() == StatClosed
 }
 
-func noNeedToRemoveDuplicate(request entity2.IRequest) bool {
+func noNeedToRemoveDuplicate(request ent.IRequest) bool {
 	return http.MethodPost == request.GetMethod()
 }

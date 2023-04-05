@@ -4,6 +4,7 @@ import (
 	"github.com/gogodjzhu/gogoscrapy/entity"
 	"github.com/gogodjzhu/gogoscrapy/utils"
 	"github.com/gogodjzhu/gogoscrapy/utils/redisUtil"
+	log "github.com/sirupsen/logrus"
 )
 
 type DuplicateRemover interface {
@@ -49,7 +50,7 @@ func (this *RedisDuplicateRemover) IsDuplicate(request entity.IRequest) bool {
 	defer conn.Close()
 	res, err := conn.Do("PFADD", this.pfkey, request.GetUrl())
 	if err != nil {
-		LOG.Warnf("failed to PFADD to redis so treat this as NotDuplicate, err:%+v", err)
+		log.Warnf("failed to PFADD to redis so treat this as NotDuplicate, err:%+v", err)
 		return false
 	}
 	return res == 1
@@ -60,7 +61,7 @@ func (this *RedisDuplicateRemover) ResetDuplicate() {
 	defer conn.Close()
 	_, err := conn.Do("DEL", this.pfkey)
 	if err != nil {
-		LOG.Warnf("failed to DEL HyperLogLog key, err:%+v", err)
+		log.Warnf("failed to DEL HyperLogLog key, err:%+v", err)
 	}
 }
 
@@ -69,7 +70,7 @@ func (this *RedisDuplicateRemover) GetTotalCount() int {
 	defer conn.Close()
 	res, err := conn.Do("PFCOUNT", this.pfkey)
 	if err != nil {
-		LOG.Warnf("failed to PFCOUNT HyperLogLog key, err:%+v", err)
+		log.Warnf("failed to PFCOUNT HyperLogLog key, err:%+v", err)
 		return 0
 	}
 	return res.(int)
