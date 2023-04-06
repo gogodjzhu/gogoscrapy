@@ -29,7 +29,12 @@ func (this *DoubanMovieProc) Process(page ent.IPage) error {
 	for _, node := range page.GetHtmlNode().Links().Regex(`https://movie.douban.com/subject/[0-9]+/`).Nodes() {
 		url := strings.Split(node.Text(), "#")[0]
 		if strings.HasPrefix(url, "https://movie.douban.com/subject/") {
-			req := ent.NewGetRequest(url).SetUseProxy(false)
+			req, err := ent.NewGetRequest(url)
+			if err != nil {
+				log.Errorf("failed to create request, url:%s, err:%+v", url, err)
+				continue
+			}
+			req.SetUseProxy(true)
 			//req.SetPriority(3)//set the priority if you want, greater will be processed first
 			reqs = append(reqs, req)
 		}

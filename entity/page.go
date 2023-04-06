@@ -63,83 +63,83 @@ func NewPage(request IRequest, document *goquery.Document, charset string, statu
 	}
 }
 
-func (this *Page) GetRequest() IRequest {
-	return this.Request
+func (pg *Page) GetRequest() IRequest {
+	return pg.Request
 }
 
-func (this *Page) GetDocument() *goquery.Document {
-	return this.Document
+func (pg *Page) GetDocument() *goquery.Document {
+	return pg.Document
 }
 
-func (this *Page) GetHtmlNode() *selector.HtmlNode {
-	return this.HtmlRootNode
+func (pg *Page) GetHtmlNode() *selector.HtmlNode {
+	return pg.HtmlRootNode
 }
 
-func (this *Page) GetCharset() string {
-	return this.Charset
+func (pg *Page) GetCharset() string {
+	return pg.Charset
 }
 
-func (this *Page) GetStatusCode() int {
-	return this.Status
+func (pg *Page) GetStatusCode() int {
+	return pg.Status
 }
 
-//add raw request url
-func (this *Page) AddTargetRequestUrls(urlStrs ...string) {
+// AddTargetRequestUrls add raw url as a get request
+func (pg *Page) AddTargetRequestUrls(urlStrs ...string) {
 	for _, urlStr := range urlStrs {
 		req, err := NewGetRequest(urlStr)
 		if err != nil {
 			log.Warnf("add target request url error: %s", err)
 			continue
 		}
-		this.AddTargetRequests(req)
+		pg.AddTargetRequests(req)
 	}
 }
 
-//add request
-func (this *Page) AddTargetRequests(requests ...IRequest) {
+// AddTargetRequests add request
+func (pg *Page) AddTargetRequests(requests ...IRequest) {
 	for _, req := range requests {
 		urlStr := req.GetUrl()
 		if urlStr == "" || urlStr == "#" || strings.HasPrefix(urlStr, "javascript:") {
 			continue
 		}
-		if urlStr = this.canonicalizeUrl(urlStr); urlStr == "" {
+		if urlStr = pg.canonicalizeUrl(urlStr); urlStr == "" {
 			continue
 		}
-		this.TargetRequests = append(this.TargetRequests, req)
+		pg.TargetRequests = append(pg.TargetRequests, req)
 	}
 }
 
-func (this *Page) canonicalizeUrl(url string) string {
+func (pg *Page) canonicalizeUrl(url string) string {
 	switch {
 	case strings.Index(url, "http://") == 0 || strings.Index(url, "https://") == 0:
 		return url
 	case strings.Index(url, "/") == 0 || strings.Index(url, "?") == 0:
-		return this.domain + url
+		return pg.domain + url
 	default:
 		return ""
 	}
 }
 
-func (this *Page) GetTargetRequests() []IRequest {
-	return this.TargetRequests
+func (pg *Page) GetTargetRequests() []IRequest {
+	return pg.TargetRequests
 }
 
-func (this *Page) GetRespHeaders() map[string][]string {
-	return this.RespHeaders
+func (pg *Page) GetRespHeaders() map[string][]string {
+	return pg.RespHeaders
 }
 
-func (this *Page) GetUrl() *selector.PlainText {
-	return this.Url
+func (pg *Page) GetUrl() *selector.PlainText {
+	return pg.Url
 }
 
-func (this *Page) StoreField(key string, obj interface{}) {
-	this.resultItems.Put(key, obj)
+func (pg *Page) StoreField(key string, obj interface{}) {
+	pg.resultItems.Put(key, obj)
 }
 
-func (this *Page) GetResultItems() IResultItems {
-	return this.resultItems
+func (pg *Page) GetResultItems() IResultItems {
+	return pg.resultItems
 }
 
-func (this *Page) GetRawText() string {
-	return this.rawText
+func (pg *Page) GetRawText() string {
+	return pg.rawText
 }

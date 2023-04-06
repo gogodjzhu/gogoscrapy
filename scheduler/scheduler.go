@@ -40,39 +40,40 @@ func NewQueueScheduler() *QueueScheduler {
 	}
 }
 
-func (this *QueueScheduler) Push(req ent.IRequest) {
-	if this.stat.Load() != StatRunning {
+func (qs *QueueScheduler) Push(req ent.IRequest) {
+	if qs.stat.Load() != StatRunning {
 		return
 	}
-	if noNeedToRemoveDuplicate(req) || !this.remover.IsDuplicate(req) {
+	isDuplicate, _ := qs.remover.IsDuplicate(req)
+	if noNeedToRemoveDuplicate(req) || !isDuplicate {
 		log.Debugf("push req, %+s", req.GetUrl())
 		if req.GetPriority() > 0 {
-			this.pushWithPriority(req, req.GetPriority())
+			qs.pushWithPriority(req, req.GetPriority())
 		} else {
-			this.queue.Push(req)
+			qs.queue.Push(req)
 		}
 	} else if req.IsRetry() {
 		log.Debugf("push retry req, %+s", req.GetUrl())
 		if req.GetPriority() > 0 {
-			this.pushWithPriority(req, req.GetPriority())
+			qs.pushWithPriority(req, req.GetPriority())
 		} else {
-			this.queue.Push(req)
+			qs.queue.Push(req)
 		}
 	}
 }
 
-func (this *QueueScheduler) pushWithPriority(req ent.IRequest, priority int64) {
-	this.asyncPriorityQueue.PushWithPriority(req, priority)
+func (qs *QueueScheduler) pushWithPriority(req ent.IRequest, priority int64) {
+	qs.asyncPriorityQueue.PushWithPriority(req, priority)
 }
 
-func (this *QueueScheduler) Poll() ent.IRequest {
-	ret := this.asyncPriorityQueue.Pop()
+func (qs *QueueScheduler) Poll() ent.IRequest {
+	ret := qs.asyncPriorityQueue.Pop()
 	if ret != nil {
 		req := ret.(ent.IRequest)
 		log.Infof("poll req, %+s", req.GetUrl())
 		return req
 	}
-	ret = this.queue.Pop()
+	ret = qs.queue.Pop()
 	if ret != nil {
 		req := ret.(ent.IRequest)
 		log.Infof("poll req, %+s", req.GetUrl())
@@ -82,22 +83,22 @@ func (this *QueueScheduler) Poll() ent.IRequest {
 	}
 }
 
-func (this *QueueScheduler) Size() int {
-	return this.queue.Len()
+func (qs *QueueScheduler) Size() int {
+	return qs.queue.Len()
 }
 
-func (this *QueueScheduler) Close() error {
-	this.stat.Store(StatClosing)
-	for !this.queue.IsEmpty() {
+func (qs *QueueScheduler) Close() error {
+	qs.stat.Store(StatClosing)
+	for !qs.queue.IsEmpty() {
 		time.Sleep(1 * time.Second)
-		log.Infof("schedule waiting queue clear, left size:%d", this.queue.Len())
+		log.Infof("schedule waiting queue clear, left size:%d", qs.queue.Len())
 	}
-	this.stat.Store(StatClosed)
+	qs.stat.Store(StatClosed)
 	return nil
 }
 
-func (this *QueueScheduler) IsClose() bool {
-	return this.stat.Load() == StatClosed
+func (qs *QueueScheduler) IsClose() bool {
+	return qs.stat.Load() == StatClosed
 }
 
 func noNeedToRemoveDuplicate(request ent.IRequest) bool {

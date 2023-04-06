@@ -1,42 +1,50 @@
 package redisUtil
 
 import (
-	"github.com/gogodjzhu/gogoscrapy/utils"
+	"github.com/alicebob/miniredis/v2"
 	"testing"
 )
 
-func TestRedisInit(t *testing.T) {
-	conf := Config{
-		Host: "ubuntu01:6379",
+func TestNewRedisClient(t *testing.T) {
+	type args struct {
+		conf Config
 	}
-	if err := Init(conf); err != nil {
-		t.Errorf("test failed @ TestRedisInit, err:%+v", err)
+	mr := miniredis.RunT(t)
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "invalid-addr",
+			args: args{
+				conf: Config{
+					Addr:     "invalid-addr",
+					Password: "",
+					Db:       0,
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "ok",
+			args: args{
+				conf: Config{
+					Addr:     mr.Addr(),
+					Password: "",
+					Db:       0,
+				},
+			},
+			wantErr: false,
+		},
 	}
-}
-
-func TestGetConn(t *testing.T) {
-	TestRedisInit(t)
-	conn := GetConn()
-	if _, err := conn.Do("SET", "name", "gogodjzhu"); err != nil {
-		t.Errorf("test failed @ TestGetConn, err:%+v", err)
-	}
-	if res, err := conn.Do("GET", "name"); err != nil || utils.Uint8ToString(res.([]uint8)) != "gogodjzhu" {
-		t.Errorf("test failed @ TestGetConn, err:%+v", err)
-	}
-	if _, err := conn.Do("DEL", "name", "gogodjzhu"); err != nil {
-		t.Errorf("test failed @ TestGetConn, err:%+v", err)
-	}
-	if res, err := conn.Do("GET", "name"); err != nil || res != nil {
-		t.Errorf("test failed @ TestGetConn, err:%+v", err)
-	}
-}
-
-func TestPFADD(t *testing.T) {
-	TestRedisInit(t)
-	conn := GetConn()
-	if res, err := conn.Do("PFADD", "pfadd", "gogodjzhu"); err != nil {
-		t.Errorf("test failed @ TestGetConn, err:%+v", err)
-	} else {
-		t.Log(res)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := NewRedisClient(tt.args.conf)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("NewRedisClient() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+		})
 	}
 }

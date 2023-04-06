@@ -27,7 +27,12 @@ func (this *DoubanBookProc) Process(page entity2.IPage) error {
 	for _, node := range page.GetHtmlNode().Links().Regex(`https://book.douban.com/subject/[0-9]+/`).Nodes() {
 		url := strings.Split(node.Text(), "#")[0]
 		if strings.HasPrefix(url, "https://book.douban.com/subject/") {
-			req := entity2.NewGetRequest(url).SetUseProxy(true)
+			req, err := entity2.NewGetRequest(url)
+			if err != nil {
+				log.Errorf("failed to create request, url:%s, err:%+v", url, err)
+				continue
+			}
+			req.SetUseProxy(true)
 			//req.SetPriority(3)//set the priority if you want, greater will be processed first
 			reqs = append(reqs, req)
 		}

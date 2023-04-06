@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"errors"
 	"github.com/gogodjzhu/gogoscrapy/entity"
 	"github.com/gogodjzhu/gogoscrapy/utils"
 	"github.com/gogodjzhu/gogoscrapy/utils/redisUtil"
@@ -8,9 +9,9 @@ import (
 )
 
 type DuplicateRemover interface {
-	IsDuplicate(request entity.IRequest) bool
-	ResetDuplicate()
-	GetTotalCount() int
+	IsDuplicate(request entity.IRequest) (bool, error)
+	ResetDuplicate() error
+	GetTotalCount() (int, error)
 }
 
 type MemDuplicateRemover struct {
@@ -18,60 +19,69 @@ type MemDuplicateRemover struct {
 }
 
 func NewMemDuplicateRemover() *MemDuplicateRemover {
-	return &MemDuplicateRemover{remover: utils.NewAsyncSet()}
+	return &MemDuplicateRemover{
+		remover: utils.NewAsyncSet(),
+	}
 }
 
-func (this *MemDuplicateRemover) IsDuplicate(request entity.IRequest) bool {
-	return !this.remover.Add(request.GetUrl())
+func (mdr *MemDuplicateRemover) IsDuplicate(request entity.IRequest) (bool, error) {
+	return !mdr.remover.Add(request.GetUrl()), nil
 }
 
-func (this *MemDuplicateRemover) ResetDuplicate() {
-	this.remover.Clear()
+func (mdr *MemDuplicateRemover) ResetDuplicate() error {
+	mdr.remover.Clear()
+	return nil
 }
 
-func (this *MemDuplicateRemover) GetTotalCount() int {
-	return this.remover.Size()
+func (mdr *MemDuplicateRemover) GetTotalCount() (int, error) {
+	return mdr.remover.Size(), nil
 }
 
 type RedisDuplicateRemover struct {
 	pfkey string
+	rs    *redisUtil.RedisClient
 }
 
-func NewRedisDuplicatedRemover(config redisUtil.Config, pfkey string) (*RedisDuplicateRemover, error) {
-	if err := redisUtil.Init(config); err != nil {
-		return nil, err
-	} else {
-		return &RedisDuplicateRemover{pfkey: pfkey}, nil
-	}
+func NewRedisDuplicatedRemover(rs *redisUtil.RedisClient, pfkey string) (*RedisDuplicateRemover, error) {
+	return &RedisDuplicateRemover{
+		rs:    rs,
+		pfkey: pfkey,
+	}, nil
 }
 
-func (this *RedisDuplicateRemover) IsDuplicate(request entity.IRequest) bool {
-	conn := redisUtil.GetConn()
-	defer conn.Close()
-	res, err := conn.Do("PFADD", this.pfkey, request.GetUrl())
+func (rdr *RedisDuplicateRemover) IsDuplicate(request entity.IRequest) (bool, error) {
+	conn, err := rdr.rs.GetConn()
 	if err != nil {
-		log.Warnf("failed to PFADD to redis so treat this as NotDuplicate, err:%+v", err)
-		return false
+		return false, err
 	}
-	return res == 1
+	defer conn.Close()
+	res, err := conn.Do("PFADD", rdr.pfkey, request.GetUrl())
+	if err != nil {
+		return false, nil
+	}
+	return res == 1, nil
 }
 
-func (this *RedisDuplicateRemover) ResetDuplicate() {
-	conn := redisUtil.GetConn()
-	defer conn.Close()
-	_, err := conn.Do("DEL", this.pfkey)
+func (rdr *RedisDuplicateRemover) ResetDuplicate() error {
+	conn, err := rdr.rs.GetConn()
 	if err != nil {
-		log.Warnf("failed to DEL HyperLogLog key, err:%+v", err)
+		log.Warnf("failed to get redis conn, err:%+v", err)
+		return errors.New("failed to get redis conn")
 	}
+	defer conn.Close()
+	_, err = conn.Do("DEL", rdr.pfkey)
+	return err
 }
 
-func (this *RedisDuplicateRemover) GetTotalCount() int {
-	conn := redisUtil.GetConn()
-	defer conn.Close()
-	res, err := conn.Do("PFCOUNT", this.pfkey)
+func (rdr *RedisDuplicateRemover) GetTotalCount() (int, error) {
+	conn, err := rdr.rs.GetConn()
 	if err != nil {
-		log.Warnf("failed to PFCOUNT HyperLogLog key, err:%+v", err)
-		return 0
+		return 0, err
 	}
-	return res.(int)
+	defer conn.Close()
+	res, err := conn.Do("PFCOUNT", rdr.pfkey)
+	if err != nil {
+		return 0, err
+	}
+	return res.(int), nil
 }

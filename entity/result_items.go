@@ -12,25 +12,25 @@ type ResultItems struct {
 	Skip  bool
 }
 
-func NewResultItems(skip bool) *ResultItems {
+func NewResultItems(skip bool) IResultItems {
 	return &ResultItems{
 		Items: make(map[string]interface{}),
 		Skip:  skip,
 	}
 }
 
-func (this *ResultItems) Get(key string) interface{} {
-	return this.Items[key]
+func (ri *ResultItems) Get(key string) interface{} {
+	return ri.Items[key]
 }
 
-func (this *ResultItems) Put(key string, value interface{}) {
-	this.Items[key] = value
+func (ri *ResultItems) Put(key string, value interface{}) {
+	ri.Items[key] = value
 }
 
-func (this *ResultItems) IsSkip() bool {
-	return this.Skip
+func (ri *ResultItems) IsSkip() bool {
+	return ri.Skip
 }
 
-func (this *ResultItems) All() map[string]interface{} {
-	return this.Items
+func (ri *ResultItems) All() map[string]interface{} {
+	return ri.Items
 }

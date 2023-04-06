@@ -7,14 +7,14 @@ import (
 	"testing"
 )
 
-func getHtmlNode() HtmlNode {
+func getHtmlNode() *HtmlNode {
 	reader := strings.NewReader(htmlStr)
 	doc, err := goquery.NewDocumentFromReader(reader)
 	if err != nil {
 		panic(err)
 	}
 	htmlNode := HtmlNode{[]*html.Node{doc.Get(0)}}
-	return htmlNode
+	return &htmlNode
 }
 func TestHtmlNode_Nodes(t *testing.T) {
 	TestHtmlNode_Links(t)

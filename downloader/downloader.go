@@ -89,7 +89,7 @@ func getRawText(header http.Header, doc *goquery.Document) (string, error) {
 			case strings.TrimSpace(pair) == "text/xml":
 				return doc.Find("body").Html()
 			case strings.TrimSpace(pair) == "text/html":
-				return doc.Html()
+				return doc.Find("body").Html()
 			}
 		}
 	}

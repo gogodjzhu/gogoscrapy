@@ -7,17 +7,19 @@ import (
 
 func TestNewMemDuplicateRemover(t *testing.T) {
 	remover := NewMemDuplicateRemover()
-	if remover.IsDuplicate(&entity.Request{Url: "abc"}) {
-		t.Error("test failed @ TestNewMemDuplicateRemover")
+	if result, err := remover.IsDuplicate(&entity.Request{Url: "abc"}); result || err != nil {
+		t.FailNow()
 	}
-	if !remover.IsDuplicate(&entity.Request{Url: "abc"}) {
-		t.Error("test failed @ TestNewMemDuplicateRemover")
+	if result, err := remover.IsDuplicate(&entity.Request{Url: "abc"}); !result || err != nil {
+		t.FailNow()
 	}
-	if remover.GetTotalCount() != 1 {
-		t.Error("test failed @ TestNewMemDuplicateRemover")
+	if result, err := remover.GetTotalCount(); result != 1 || err != nil {
+		t.FailNow()
 	}
-	remover.ResetDuplicate()
-	if remover.IsDuplicate(&entity.Request{Url: "abc"}) {
-		t.Error("test failed @ TestNewMemDuplicateRemover")
+	if err := remover.ResetDuplicate(); err != nil {
+		t.FailNow()
+	}
+	if result, err := remover.IsDuplicate(&entity.Request{Url: "abc"}); result || err != nil {
+		t.FailNow()
 	}
 }

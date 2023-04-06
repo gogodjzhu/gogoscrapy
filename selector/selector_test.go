@@ -647,7 +647,7 @@ func TestCssSelector_SelectNodeList(t *testing.T) {
 		}
 		actualStr := strings.TrimSpace(htmlStr)
 		if expectedArr[i] != actualStr {
-			t.Errorf("failed test @ TestCssSelector_SelectNodeList, expecteds:%s, actuals:%s", expectedArr[i], actual)
+			t.Errorf("failed test @ TestCssSelector_SelectNodeList, expecteds:%s, actuals:%s", expectedArr[i], actualStr)
 		}
 	}
 }
