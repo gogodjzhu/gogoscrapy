@@ -1,8 +1,8 @@
 package entity
 
 import (
-	"errors"
 	"github.com/gogodjzhu/gogoscrapy/utils"
+	"github.com/pkg/errors"
 	"net/http"
 )
 

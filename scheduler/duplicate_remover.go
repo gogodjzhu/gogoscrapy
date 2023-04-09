@@ -1,11 +1,12 @@
 package scheduler
 
 import (
-	"errors"
 	"github.com/gogodjzhu/gogoscrapy/entity"
 	"github.com/gogodjzhu/gogoscrapy/utils"
 	"github.com/gogodjzhu/gogoscrapy/utils/redisUtil"
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+	"net/http"
 )
 
 type DuplicateRemover interface {
@@ -25,6 +26,9 @@ func NewMemDuplicateRemover() *MemDuplicateRemover {
 }
 
 func (mdr *MemDuplicateRemover) IsDuplicate(request entity.IRequest) (bool, error) {
+	if noNeedToRemoveDuplicate(request) {
+		return false, nil
+	}
 	return !mdr.remover.Add(request.GetUrl()), nil
 }
 
@@ -50,6 +54,9 @@ func NewRedisDuplicatedRemover(rs *redisUtil.RedisClient, pfkey string) (*RedisD
 }
 
 func (rdr *RedisDuplicateRemover) IsDuplicate(request entity.IRequest) (bool, error) {
+	if noNeedToRemoveDuplicate(request) {
+		return false, nil
+	}
 	conn, err := rdr.rs.GetConn()
 	if err != nil {
 		return false, err
@@ -84,4 +91,8 @@ func (rdr *RedisDuplicateRemover) GetTotalCount() (int, error) {
 		return 0, err
 	}
 	return res.(int), nil
+}
+
+func noNeedToRemoveDuplicate(request entity.IRequest) bool {
+	return http.MethodPost == request.GetMethod()
 }

@@ -1,106 +1,109 @@
 package scheduler
 
 import (
+	"container/heap"
+	"context"
 	ent "github.com/gogodjzhu/gogoscrapy/entity"
-	u "github.com/gogodjzhu/gogoscrapy/utils"
+	"github.com/gogodjzhu/gogoscrapy/utils"
 	log "github.com/sirupsen/logrus"
-	"net/http"
-	"sync/atomic"
+	"sync"
 	"time"
 )
 
 type IScheduler interface {
-	ent.Closeable
-	Push(request ent.IRequest)
-	Poll() ent.IRequest
-	Size() int
+	PushChan() chan ent.IRequest
+	PullChan() chan ent.IRequest
+	CacheSize() int
 }
 
-const (
-	StatRunning = iota
-	StatClosing
-	StatClosed
-)
-
-type QueueScheduler struct {
-	remover            DuplicateRemover
-	queue              *u.AsyncQueue
-	asyncPriorityQueue *u.AsyncPriorityQueue
-	stat               atomic.Value
+type MemScheduler struct {
+	remover        DuplicateRemover
+	inChan         chan ent.IRequest
+	outChan        chan ent.IRequest
+	bufferRequests *utils.Heap
 }
 
-func NewQueueScheduler() *QueueScheduler {
-	running := atomic.Value{}
-	running.Store(StatRunning)
-	return &QueueScheduler{
-		stat:               running,
-		queue:              u.NewAsyncQueue(),
-		asyncPriorityQueue: u.NewAsyncPriorityQueue(),
-		remover:            NewMemDuplicateRemover(),
+func NewMemScheduler(ctx context.Context, wg *sync.WaitGroup) *MemScheduler {
+	scheduler := &MemScheduler{
+		remover:        NewMemDuplicateRemover(),
+		inChan:         make(chan ent.IRequest),
+		outChan:        make(chan ent.IRequest),
+		bufferRequests: utils.NewHeap(),
 	}
-}
-
-func (qs *QueueScheduler) Push(req ent.IRequest) {
-	if qs.stat.Load() != StatRunning {
-		return
-	}
-	isDuplicate, _ := qs.remover.IsDuplicate(req)
-	if noNeedToRemoveDuplicate(req) || !isDuplicate {
-		log.Debugf("push req, %+s", req.GetUrl())
-		if req.GetPriority() > 0 {
-			qs.pushWithPriority(req, req.GetPriority())
-		} else {
-			qs.queue.Push(req)
+	lock := &sync.Mutex{}
+	// a helper function to pull request from bufferRequests
+	pullBuffer := func() ent.IRequest {
+		lock.Lock()
+		defer lock.Unlock()
+		if scheduler.bufferRequests.Len() == 0 {
+			return nil
 		}
-	} else if req.IsRetry() {
-		log.Debugf("push retry req, %+s", req.GetUrl())
-		if req.GetPriority() > 0 {
-			qs.pushWithPriority(req, req.GetPriority())
-		} else {
-			qs.queue.Push(req)
+		next := heap.Pop(scheduler.bufferRequests).(*utils.Item)
+		req := next.GetValue().(ent.IRequest)
+		if isDup, err := scheduler.remover.IsDuplicate(req); err != nil {
+			log.Warnf("failed to check duplicate err: %+v", err)
+			return req
+		} else if !isDup {
+			return req
 		}
-	}
-}
-
-func (qs *QueueScheduler) pushWithPriority(req ent.IRequest, priority int64) {
-	qs.asyncPriorityQueue.PushWithPriority(req, priority)
-}
-
-func (qs *QueueScheduler) Poll() ent.IRequest {
-	ret := qs.asyncPriorityQueue.Pop()
-	if ret != nil {
-		req := ret.(ent.IRequest)
-		log.Infof("poll req, %+s", req.GetUrl())
-		return req
-	}
-	ret = qs.queue.Pop()
-	if ret != nil {
-		req := ret.(ent.IRequest)
-		log.Infof("poll req, %+s", req.GetUrl())
-		return req
-	} else {
 		return nil
 	}
-}
 
-func (qs *QueueScheduler) Size() int {
-	return qs.queue.Len()
-}
-
-func (qs *QueueScheduler) Close() error {
-	qs.stat.Store(StatClosing)
-	for !qs.queue.IsEmpty() {
-		time.Sleep(1 * time.Second)
-		log.Infof("schedule waiting queue clear, left size:%d", qs.queue.Len())
+	// a helper function to push request into bufferRequests
+	pushBuffer := func(req ent.IRequest) {
+		lock.Lock()
+		defer lock.Unlock()
+		item := utils.NewItem(req, req.GetPriority())
+		heap.Push(scheduler.bufferRequests, item)
 	}
-	qs.stat.Store(StatClosed)
-	return nil
+	go func(ctx context.Context, wg *sync.WaitGroup) { // out from scheduler
+		wg.Add(1)
+		defer wg.Done()
+		for {
+			select {
+			case <-ctx.Done():
+				log.Infof("scheduler@out is closed by context, drop remain buffer size: %d", scheduler.bufferRequests.Len())
+				return
+			default:
+				next := pullBuffer()
+				if next == nil {
+					time.Sleep(1 * time.Millisecond)
+					continue
+				}
+				select {
+				case <-ctx.Done():
+					log.Infof("scheduler@out is closed by context, drop remain buffer size: %d", scheduler.bufferRequests.Len())
+					return
+				case scheduler.outChan <- next:
+					// inChan is unbuffered, this will block until received
+				}
+			}
+		}
+	}(ctx, wg)
+	go func(ctx context.Context, wg *sync.WaitGroup) { // into scheduler
+		wg.Add(1)
+		defer wg.Done()
+		for {
+			select {
+			case <-ctx.Done():
+				log.Infof("scheduler@in is closed by context")
+				return
+			case req := <-scheduler.inChan:
+				pushBuffer(req)
+			}
+		}
+	}(ctx, wg)
+	return scheduler
 }
 
-func (qs *QueueScheduler) IsClose() bool {
-	return qs.stat.Load() == StatClosed
+func (qs *MemScheduler) PushChan() chan ent.IRequest {
+	return qs.inChan
 }
 
-func noNeedToRemoveDuplicate(request ent.IRequest) bool {
-	return http.MethodPost == request.GetMethod()
+func (qs *MemScheduler) PullChan() chan ent.IRequest {
+	return qs.outChan
+}
+
+func (qs *MemScheduler) CacheSize() int {
+	return qs.bufferRequests.Len()
 }

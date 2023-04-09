@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/gogodjzhu/gogoscrapy"
 	"github.com/gogodjzhu/gogoscrapy/downloader"
@@ -15,7 +16,7 @@ import (
 type DoubanMovieProc struct {
 }
 
-//`Process` process the page and fetch the info we want.
+//`Pipe` process the page and fetch the info we want.
 func (this *DoubanMovieProc) Process(page ent.IPage) error {
 	defer func() {
 		if err := recover(); err != nil {
@@ -96,11 +97,10 @@ func (this *DoubanMovieProc) Process(page ent.IPage) error {
 }
 
 func main() {
+	ctx := context.Background()
 	spider := gogoscrapy.NewSpider(&DoubanMovieProc{})
 	spider.Downloader(downloader.NewSimpleDownloader(10*time.Second, nil))
 	spider.DownloadCoroutineNum(1)
-	spider.DownloadInterval(5 * time.Second)
-	spider.RetryTime(10)
 	spider.AddStartUrl("https://movie.douban.com/", "https://movie.douban.com/chart")
-	spider.Start()
+	spider.Start(ctx)
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gogodjzhu/gogoscrapy"
 	"github.com/gogodjzhu/gogoscrapy/downloader"
@@ -16,7 +17,7 @@ import (
 type DoubanBookProc struct {
 }
 
-//`Process` process the page and fetch the info we want.
+//`Pipe` process the page and fetch the info we want.
 func (this *DoubanBookProc) Process(page entity2.IPage) error {
 	defer func() {
 		if err := recover(); err != nil {
@@ -113,11 +114,11 @@ func (this *DoubanBookProc) Process(page entity2.IPage) error {
 }
 
 func main() {
+	ctx := context.Background()
 	spider := gogoscrapy.NewSpider(&DoubanBookProc{})
 	spider.Downloader(downloader.NewSimpleDownloader(10*time.Second, nil))
 	spider.DownloadCoroutineNum(1)
-	spider.DownloadInterval(5 * time.Second)
-	spider.RetryTime(10)
+	spider.MaxDownloadRetryTime(10)
 	spider.AddStartUrl("https://book.douban.com/subject/27081847/")
-	spider.Start()
+	spider.Start(ctx)
 }

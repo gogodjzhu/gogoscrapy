@@ -2,9 +2,8 @@ package downloader
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
-	"github.com/gogodjzhu/gogoscrapy/utils"
+	"github.com/pkg/errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -62,7 +61,6 @@ type FileHttpProxyFactory struct {
 	fileUrl    string //file path
 	proxyCache []IProxy
 	index      *int32
-	proxyQueue *utils.AsyncQueue
 }
 
 func NewFileHttpProxyFactory(fileUrl string) (IProxyFactory, error) {
@@ -71,7 +69,6 @@ func NewFileHttpProxyFactory(fileUrl string) (IProxyFactory, error) {
 		fileUrl:    fileUrl,
 		proxyCache: make([]IProxy, 0),
 		index:      &i,
-		proxyQueue: &utils.AsyncQueue{},
 	}
 	if err := fileProxyFactory.init(); err != nil {
 		return nil, err

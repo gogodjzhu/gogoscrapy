@@ -1,7 +1,7 @@
 package gogoscrapy
 
+import "context"
+
 type IApp interface {
-	Start()
-	Shutdown()
-	IsShutdown() bool
+	Start(ctx context.Context)
 }

@@ -1,8 +1,11 @@
 package gogoscrapy
 
 import (
+	"context"
+	"errors"
 	"github.com/gogodjzhu/gogoscrapy/downloader"
 	"github.com/gogodjzhu/gogoscrapy/entity"
+	buzzErr "github.com/gogodjzhu/gogoscrapy/err"
 	"github.com/gogodjzhu/gogoscrapy/pipeline"
 	"github.com/gogodjzhu/gogoscrapy/processor"
 	"github.com/gogodjzhu/gogoscrapy/scheduler"
@@ -15,186 +18,162 @@ import (
 
 type ISpider interface {
 	IApp
+	Downloader(downloader downloader.IDownloader) ISpider
+	Pipeline(pipeline pipeline.IPipeline) ISpider
+	Processor(processor processor.IProcessor) ISpider
+	Scheduler(scheduler scheduler.IScheduler) ISpider
+	DownloadCoroutineNum(num int) ISpider
+	AddStartUrl(urls ...string) ISpider
+	AddStartRequest(request entity.IRequest) ISpider
+	MaxDownloadRetryTime(rt int) ISpider
 }
-
-const (
-	StatInit = iota
-	StatRunning
-	StatStopped
-)
 
 type spider struct {
 	downloader downloader.IDownloader
+	pipelines  []pipeline.IPipeline
+	processor  processor.IProcessor
+	scheduler  scheduler.IScheduler
 
-	pipelines []pipeline.IPipeline
-	processor processor.IProcessor
-	scheduler scheduler.IScheduler
-
-	stat          atomic.Value
 	startRequests []entity.IRequest
 
 	downloaderCoroutineNum int
-	processorChan          chan entity.IPage
 	processorCoroutineNum  int
-	retryTime              int
-	downloadInterval       time.Duration
+	maxDownloadRetryTime   int // download retry time, -1 means retry forever
+
+	downloadingNum int32             // downloading num
+	pageChan       chan entity.IPage // page channel between downloader and processor
+
+	wg *sync.WaitGroup // wait group for all goroutines
 }
 
-func NewSpider(proc processor.IProcessor) *spider {
+func NewSpider(proc processor.IProcessor) ISpider {
 	return &spider{
 		processor: proc,
+
+		pageChan: make(chan entity.IPage, 100),
+
+		wg: &sync.WaitGroup{},
 	}
 }
 
-func (sp *spider) Downloader(downloader downloader.IDownloader) *spider {
+func (sp *spider) Downloader(downloader downloader.IDownloader) ISpider {
 	sp.downloader = downloader
 	return sp
 }
 
-func (sp *spider) Pipeline(pipeline pipeline.IPipeline) *spider {
+func (sp *spider) Pipeline(pipeline pipeline.IPipeline) ISpider {
 	sp.pipelines = append(sp.pipelines, pipeline)
 	return sp
 }
 
-func (sp *spider) Processor(processor processor.IProcessor) *spider {
+func (sp *spider) Processor(processor processor.IProcessor) ISpider {
 	sp.processor = processor
 	return sp
 }
 
-func (sp *spider) Scheduler(scheduler scheduler.IScheduler) *spider {
+func (sp *spider) Scheduler(scheduler scheduler.IScheduler) ISpider {
 	sp.scheduler = scheduler
 	return sp
 }
 
-func (sp *spider) DownloadCoroutineNum(num int) *spider {
+func (sp *spider) DownloadCoroutineNum(num int) ISpider {
 	sp.downloaderCoroutineNum = num
 	return sp
 }
 
-func (sp *spider) AddStartUrl(urls ...string) {
+func (sp *spider) AddStartUrl(urls ...string) ISpider {
 	if sp.startRequests == nil {
 		sp.startRequests = make([]entity.IRequest, 0)
 	}
 	for _, url := range urls {
 		sp.startRequests = append(sp.startRequests, &entity.Request{Url: url, Method: http.MethodGet})
 	}
+	return sp
 }
 
-func (sp *spider) AddStartRequest(request entity.IRequest) {
+func (sp *spider) AddStartRequest(request entity.IRequest) ISpider {
 	if sp.startRequests == nil {
 		sp.startRequests = make([]entity.IRequest, 0)
 	}
 	sp.startRequests = append(sp.startRequests, request)
-}
-
-func (sp *spider) RetryTime(rt int) *spider {
-	sp.retryTime = rt
 	return sp
 }
 
-func (sp *spider) DownloadInterval(di time.Duration) *spider {
-	sp.downloadInterval = di
+func (sp *spider) MaxDownloadRetryTime(rt int) ISpider {
+	sp.maxDownloadRetryTime = rt
 	return sp
 }
 
-func (sp *spider) Start() {
-	if sp.stat.Load() == StatRunning {
-		panic("spider is already running.")
-	}
-	sp.init()
-	sp.stat.Store(StatRunning)
-	if sp.stat.Load() == StatRunning {
-		if err := sp.doScrapy(); err != nil {
-			log.Errorf("failed scrapy, err:%+v", err)
-		}
+func (sp *spider) Start(ctx context.Context) {
+	sp.init(ctx)
+	if err := sp.doScrapy(ctx); err != nil {
+		log.Errorf("failed scrapy, err:%+v", err)
 	}
 }
 
 // actually scrapy page
-func (sp *spider) doScrapy() error {
-	wg := sync.WaitGroup{}
-	var downloadingNum int32
-
-	//exit monitor
-	go func() {
-		for {
-			time.Sleep(30 * time.Second)
-			log.Infof("task remain in scheduler: %d, downloading: %d", sp.scheduler.Size(), downloadingNum)
-			//if downloading task is none then shutdown
-			if sp.scheduler.IsClose() || (sp.scheduler.Size() < 1 && downloadingNum < 1) {
-				//wait and double check
-				time.Sleep(30 * time.Second)
-				if sp.scheduler.IsClose() || (sp.scheduler.Size() < 1 && downloadingNum < 1) {
-					log.Infof("no more task to download, shutdown it gracefully.")
-					sp.Shutdown()
-				}
-			}
-		}
-	}()
+func (sp *spider) doScrapy(ctx context.Context) error {
 
 	//parallel downloader
 	for i := 0; i < sp.downloaderCoroutineNum; i++ {
-		wg.Add(1)
-		go func(index int) {
+		sp.wg.Add(1)
+		go func(index int, ctx context.Context, wg *sync.WaitGroup) {
 			for {
-				req := sp.scheduler.Poll()
-				if req == nil {
-					if sp.scheduler.IsClose() {
-						break
+				select {
+				case <-ctx.Done():
+					log.Infof("downloader[%d] is canceled.", index)
+					wg.Done()
+					return
+				case req := <-sp.scheduler.PullChan():
+					page := sp.download(req)
+					if page != nil {
+						sp.pageChan <- page
 					}
-					//wait next request
-					time.Sleep(3 * time.Second)
-					log.Debugf("wait for next request")
-					continue
 				}
-				atomic.AddInt32(&downloadingNum, 1)
-				if page, err := sp.downloader.Download(req); err != nil {
-					sp.onDownloadFail(req, err)
-					sp.doRetry(req)
-				} else {
-					sp.onDownloadSuccess(req, page)
-					sp.processorChan <- page
-				}
-				atomic.AddInt32(&downloadingNum, -1)
-				time.Sleep(sp.downloadInterval)
 			}
-			log.Infof("downloader[%d] end.", index)
-			wg.Done()
-		}(i)
+		}(i, ctx, sp.wg)
 	}
 
 	//parallel processor
 	for i := 0; i < sp.processorCoroutineNum; i++ {
-		wg.Add(1)
-		go func(index int) {
-			for page := range sp.processorChan {
-				if err := sp.processor.Process(page); err != nil {
-					log.Errorf("processor failed to process, err:%+v", err)
-					sp.doRetry(page.GetRequest())
-					continue
-				}
-				for _, req := range page.GetTargetRequests() {
-					sp.scheduler.Push(req)
-				}
-				if !page.GetResultItems().IsSkip() {
-					for _, pipe := range sp.pipelines {
-						if err := pipe.Process(page.GetResultItems()); err != nil {
-							log.Errorf("pipeline[%+v] failed to process, err:%+v", pipe, err)
-							continue
+		sp.wg.Add(1)
+		go func(index int, ctx context.Context, wg *sync.WaitGroup) {
+			for {
+				select {
+				case <-ctx.Done():
+					log.Infof("processor[%d] is canceled.", index)
+					wg.Done()
+					return
+				case page := <-sp.pageChan:
+					if err := sp.processor.Process(page); err != nil {
+						if errors.Is(err, buzzErr.RetryAbleError) {
+							sp.reSchedule(page.GetRequest())
+						} else {
+							log.Errorf("processor failed to process, err:%+v", err)
 						}
+						continue
+					}
+					if !page.GetResultItems().IsSkip() {
+						for _, pipe := range sp.pipelines {
+							if err := pipe.Pipe(page.GetResultItems()); err != nil {
+								log.Errorf("pipeline[%+v] failed to process, err:%+v", pipe, err)
+								continue
+							}
+						}
+					}
+					for _, req := range page.GetTargetRequests() {
+						sp.scheduler.PushChan() <- req
 					}
 				}
 			}
-			log.Infof("processor[%d] end.", index)
-			wg.Done()
-		}(i)
+		}(i, ctx, sp.wg)
 	}
 
-	wg.Wait()
+	sp.wg.Wait()
 	return nil
 }
 
-func (sp *spider) doRetry(req entity.IRequest) {
+func (sp *spider) reSchedule(req entity.IRequest) {
 	var nextTimes int
 	times := req.GetExtras()[entity.CycleTriedTimes]
 	if times == nil {
@@ -203,40 +182,15 @@ func (sp *spider) doRetry(req entity.IRequest) {
 		nextTimes = times.(int) + 1
 	}
 	req.PutExtra(entity.CycleTriedTimes, nextTimes)
-	if nextTimes <= sp.retryTime {
-		sp.scheduler.Push(req)
+	if sp.maxDownloadRetryTime == -1 || nextTimes <= sp.maxDownloadRetryTime {
+		sp.scheduler.PushChan() <- req
 	} else {
 		log.Warn("give up download for retry time over")
 	}
 }
 
-func (sp *spider) Shutdown() {
-	sp.stat.Store(StatInit)
-	log.Infof("shutdown...")
-	tryClose(sp.downloader)
-	tryClose(sp.scheduler)
-	close(sp.processorChan)
-	tryClose(sp.processor)
-	for pipe := range sp.pipelines {
-		tryClose(pipe)
-	}
-	sp.stat.Store(StatStopped)
-}
-
-func tryClose(closeable interface{}) {
-	if c, ok := closeable.(entity.Closeable); ok {
-		if err := c.Close(); err != nil {
-			log.Warnf("failed to close %+v, err:%+v", c, err)
-		}
-	}
-}
-
-func (sp *spider) IsShutdown() bool {
-	return sp.stat.Load().(int) == StatStopped
-}
-
 //init spider and set the params
-func (sp *spider) init() {
+func (sp *spider) init(ctx context.Context) {
 	if sp.downloader == nil {
 		sp.downloader = downloader.NewSimpleDownloader(10*time.Second, nil)
 	}
@@ -250,34 +204,44 @@ func (sp *spider) init() {
 		sp.pipelines = append(sp.pipelines, pipeline.NewConsolePipeline())
 	}
 	if sp.scheduler == nil {
-		sp.scheduler = scheduler.NewQueueScheduler()
+		sp.scheduler = scheduler.NewMemScheduler(ctx, sp.wg)
 	}
-	if sp.retryTime < 1 {
-		sp.retryTime = 3
-	}
-	if sp.downloadInterval < 1 {
-		sp.downloadInterval = 10 * time.Second
+	if sp.maxDownloadRetryTime < 1 {
+		sp.maxDownloadRetryTime = 3
 	}
 	for _, request := range sp.startRequests {
-		sp.scheduler.Push(request)
+		sp.scheduler.PushChan() <- request
 	}
 	sp.startRequests = nil //clear object
-	sp.processorChan = make(chan entity.IPage, 1)
-	sp.stat.Store(StatInit)
+}
+
+func (sp *spider) download(req entity.IRequest) entity.IPage {
+	atomic.AddInt32(&sp.downloadingNum, 1)
+	defer atomic.AddInt32(&sp.downloadingNum, -1)
+	page, err := sp.downloader.Download(req)
+	if err != nil {
+		sp.onDownloadFail(req, err)
+		sp.reSchedule(req)
+		return nil
+	}
+	sp.onDownloadSuccess(req, page)
+	return page
 }
 
 func (sp *spider) onDownloadSuccess(req entity.IRequest, page entity.IPage) {
 	codes := sp.downloader.GetAcceptStatus()
 	for _, code := range codes {
 		if code == page.GetStatusCode() {
-			proxy := req.GetExtras()[entity.AssignedProxy]
-			sp.downloader.GetProxyFactory().ReturnProxy(proxy.(downloader.IProxy))
-			delete(req.GetExtras(), entity.AssignedProxy)
+			proxy, ok := req.GetExtras()[entity.AssignedProxy]
+			if ok {
+				sp.downloader.GetProxyFactory().ReturnProxy(proxy.(downloader.IProxy))
+				delete(req.GetExtras(), entity.AssignedProxy)
+			}
 			return
 		}
 	}
 	log.Debugf("download failed, status code:%d, url:%s", page.GetStatusCode(), req.GetUrl())
-	sp.doRetry(req)
+	sp.reSchedule(req)
 }
 
 func (sp *spider) onDownloadFail(req entity.IRequest, err error) {
